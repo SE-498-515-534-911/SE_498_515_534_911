@@ -32,9 +32,7 @@ jobs:
         run: |
           python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
 
-      - name: Diagnose US-01 imports
+      - name: Run US-01 dataset tests
         working-directory: us01_datasets_code
         run: |
-          python -c "import os,sys; print('CWD:',os.getcwd()); print('PYTHONPATH:',os.environ.get('PYTHONPATH')); print('SYS.PATH:',sys.path)"
-          python -c "import datasets; print('DATASETS PACKAGE:',datasets.__file__)"
-          python -c "import datasets.models; print('MODELS FILE:',datasets.models.__file__)"
+          python -m pytest -c pytest.ini --import-mode=importlib datasets/tests/
