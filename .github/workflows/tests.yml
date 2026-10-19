@@ -32,9 +32,10 @@ jobs:
         run: |
           python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
 
-      - name: Run US-01 dataset tests
+      - name: Diagnose US-01 package resolution
         working-directory: us01_datasets_code
         env:
           PYTHONPATH: ${{ github.workspace }}/us01_datasets_code
         run: |
-          python -m pytest -c pytest.ini --import-mode=importlib datasets/tests/
+          python -c "import datasets; print('PACKAGE:', datasets.__file__)"
+          python -c "import os,sys; sys.path.insert(0, os.path.abspath('.')); import datasets; print('PACKAGE:', datasets.__file__); import datasets.models; print('MODEL:', datasets.models.__file__)"
