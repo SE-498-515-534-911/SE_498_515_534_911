@@ -35,4 +35,4 @@ jobs:
       - name: Run US-01 dataset tests
         working-directory: us01_datasets_code
         run: |
-          python -m pytest --ds=test_settings datasets/tests/
+          python -m pytest --ds=test_settings --import-mode=importlib datasets/tests/
