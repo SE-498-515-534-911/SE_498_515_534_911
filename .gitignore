@@ -3,3 +3,13 @@
 htmlcov/
 __pycache__/
 .pytest_cache/
+
+.venv/
+
+# US-01 local environment and generated files
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
