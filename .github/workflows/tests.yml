@@ -31,8 +31,8 @@ jobs:
       - name: Run main project tests
         run: |
           python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
-
-           - name: Run US-01 dataset tests
+      
+      - name: Run US-01 dataset tests
         working-directory: us01_datasets_code
         env:
           PYTHONPATH: ${{ github.workspace }}/us01_datasets_code
