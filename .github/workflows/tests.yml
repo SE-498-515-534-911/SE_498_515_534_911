@@ -28,6 +28,11 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pytest pytest-cov
 
-      - name: Run tests with coverage
+      - name: Run main project tests
         run: |
-          python -m pytest --cov=. --cov-report=term-missing
+          python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
+
+      - name: Run US-01 dataset tests
+        working-directory: us01_datasets_code
+        run: |
+          python -m pytest --ds=test_settings datasets/tests/
