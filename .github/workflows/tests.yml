@@ -34,5 +34,7 @@ jobs:
 
       - name: Run US-01 dataset tests
         working-directory: us01_datasets_code
+        env:
+          PYTHONPATH: ${{ github.workspace }}/us01_datasets_code
         run: |
           python -m pytest -c pytest.ini --import-mode=importlib datasets/tests/
