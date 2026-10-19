@@ -31,9 +31,11 @@ jobs:
       - name: Run main project tests
         run: |
           python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
-
+      
       - name: Run US-01 dataset tests
-        if: ${{ hashFiles('us01_datasets_code/test_settings.py') != '' }}
         working-directory: us01_datasets_code
+        env:
+          PYTHONPATH: ${{ github.workspace }}/us01_datasets_code
+          DJANGO_SETTINGS_MODULE: test_settings
         run: |
-          python -m pytest --ds=test_settings datasets/tests/
+          python -m pytest -c pytest.ini --import-mode=importlib datasets/tests/
