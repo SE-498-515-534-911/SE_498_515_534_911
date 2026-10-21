@@ -1,3 +1,47 @@
-from django.shortcuts import render
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView, LogoutView
+from django.shortcuts import redirect, render
 
-# Create your views here.
+from .forms import LoginForm, RegistrationForm
+from .models import Role
+from .permissions import role_required
+
+
+def register(request):
+    if request.user.is_authenticated:
+        return redirect('accounts:home')
+    if request.method == 'POST':
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Account created. Please log in.')
+            return redirect('accounts:login')
+    else:
+        form = RegistrationForm()
+    return render(request, 'accounts/register.html', {'form': form})
+
+
+class UserLoginView(LoginView):
+    template_name = 'accounts/login.html'
+    authentication_form = LoginForm
+    redirect_authenticated_user = True
+
+
+class UserLogoutView(LogoutView):
+    """Logs out on POST only (Django default) and redirects to login."""
+
+
+@login_required
+def home(request):
+    return render(request, 'accounts/home.html')
+
+
+@role_required(Role.ADMIN)
+def admin_dashboard(request):
+    return render(request, 'accounts/admin_dashboard.html')
+
+
+@role_required(Role.DATA_SCIENTIST, Role.ADMIN)
+def workspace(request):
+    return render(request, 'accounts/workspace.html')
