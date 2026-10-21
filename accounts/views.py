@@ -4,6 +4,8 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
 
 from .forms import LoginForm, RegistrationForm
+from .models import Role
+from .permissions import role_required
 
 
 def register(request):
@@ -33,3 +35,13 @@ class UserLogoutView(LogoutView):
 @login_required
 def home(request):
     return render(request, 'accounts/home.html')
+
+
+@role_required(Role.ADMIN)
+def admin_dashboard(request):
+    return render(request, 'accounts/admin_dashboard.html')
+
+
+@role_required(Role.DATA_SCIENTIST, Role.ADMIN)
+def workspace(request):
+    return render(request, 'accounts/workspace.html')
