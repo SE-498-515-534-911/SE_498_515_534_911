@@ -19,7 +19,7 @@ def test_superuser_gets_admin_role(db):
 
 
 def test_role_choices_are_the_three_expected_roles():
-    assert {r.value for r in Role} == {'student', 'data_scientist', 'admin'}
+    assert {r.value for r in Role} == {'STUDENT', 'DATA_SCIENTIST', 'ADMIN'}
 
 
 def test_get_role_helper(student, admin_user):
@@ -33,3 +33,12 @@ def test_user_without_profile_has_no_role(student):
     Profile.objects.filter(user=student).delete()
     student = User.objects.get(pk=student.pk)
     assert get_role(student) is None
+
+
+def test_user_role_property_reads_from_profile(scientist):
+    assert scientist.role == Role.DATA_SCIENTIST == 'DATA_SCIENTIST'
+
+
+def test_user_role_property_is_none_without_profile(student):
+    Profile.objects.filter(user=student).delete()
+    assert User.objects.get(pk=student.pk).role is None

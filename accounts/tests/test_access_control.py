@@ -2,7 +2,6 @@ import pytest
 from django.urls import reverse
 
 ADMIN_URL = 'accounts:admin_dashboard'
-WORKSPACE_URL = 'accounts:workspace'
 
 
 def get_status(client, user, url_name):
@@ -11,32 +10,52 @@ def get_status(client, user, url_name):
     return client.get(reverse(url_name)).status_code
 
 
-def test_student_cannot_open_admin_dashboard(client, student):
-    assert get_status(client, student, ADMIN_URL) == 403
+# Expected access per page (SRS Table 4.1-1). None means "not logged in".
+# Every URL of the accounts app must appear here, so a new page cannot be
+# added without deciding who may open it (deny by default, MLE-F-002).
+PAGE_RULES = {
+    'accounts:home': {'STUDENT': 200, 'DATA_SCIENTIST': 200, 'ADMIN': 200, None: 302},
+    ADMIN_URL: {'STUDENT': 403, 'DATA_SCIENTIST': 403, 'ADMIN': 200, None: 302},
+}
+PUBLIC_PAGES = {'accounts:register', 'accounts:login', 'accounts:logout'}
 
 
-def test_data_scientist_cannot_open_admin_dashboard(client, scientist):
-    assert get_status(client, scientist, ADMIN_URL) == 403
+def user_for(role, student, scientist, admin_user):
+    return {'STUDENT': student, 'DATA_SCIENTIST': scientist,
+            'ADMIN': admin_user, None: None}[role]
 
 
-def test_admin_can_open_admin_dashboard(client, admin_user):
-    assert get_status(client, admin_user, ADMIN_URL) == 200
+@pytest.mark.parametrize('url_name', sorted(PAGE_RULES))
+@pytest.mark.parametrize('role', ['STUDENT', 'DATA_SCIENTIST', 'ADMIN', None])
+def test_page_access_matrix(client, db, student, scientist, admin_user, url_name, role):
+    user = user_for(role, student, scientist, admin_user)
+    assert get_status(client, user, url_name) == PAGE_RULES[url_name][role]
 
 
-def test_student_cannot_open_workspace(client, student):
-    assert get_status(client, student, WORKSPACE_URL) == 403
+def test_every_accounts_url_has_an_access_rule():
+    from accounts.urls import urlpatterns
+    names = {f'accounts:{p.name}' for p in urlpatterns}
+    assert names == set(PAGE_RULES) | PUBLIC_PAGES
 
 
-@pytest.mark.parametrize('fixture', ['scientist', 'admin_user'])
-def test_workspace_allowed_roles(client, request, fixture):
-    assert get_status(client, request.getfixturevalue(fixture), WORKSPACE_URL) == 200
-
-
-@pytest.mark.parametrize('url_name', [ADMIN_URL, WORKSPACE_URL])
-def test_anonymous_redirected_to_login(client, db, url_name):
-    response = client.get(reverse(url_name))
+def test_anonymous_redirected_to_login_with_next(client, db):
+    response = client.get(reverse(ADMIN_URL))
     assert response.status_code == 302
     assert response.url.startswith(reverse('accounts:login'))
+
+
+def test_user_without_profile_is_denied_by_default(client, student):
+    from accounts.models import Profile
+    Profile.objects.filter(user=student).delete()
+    client.force_login(student)
+    assert client.get(reverse(ADMIN_URL)).status_code == 403
+
+
+def test_admin_link_shown_to_admin_only(client, student, admin_user):
+    client.force_login(student)
+    assert b'Admin dashboard' not in client.get(reverse('accounts:home')).content
+    client.force_login(admin_user)
+    assert b'Admin dashboard' in client.get(reverse('accounts:home')).content
 
 
 def test_student_blocked_from_django_admin_site(client, student):
