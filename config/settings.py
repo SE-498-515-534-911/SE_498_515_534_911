@@ -133,6 +133,20 @@ LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'accounts:home'
 LOGOUT_REDIRECT_URL = 'accounts:login'
 
+# Sessions and cookies (MLE-SR-007, SAD 3.9).
+# 30 minutes of inactivity ends the session: the expiry is renewed on every
+# request, so only idle time counts.
+SESSION_COOKIE_AGE = 30 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True      # JavaScript cannot read the session cookie
+SESSION_COOKIE_SAMESITE = 'Lax'
+# Secure cookies only work over HTTPS, so they are switched on for deployed
+# HTTPS builds by setting WBMME_HTTPS=1 (SAD open issue OI-5).
+SESSION_COOKIE_SECURE = os.environ.get('WBMME_HTTPS') == '1'
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+# POSTs without a valid CSRF token get 403; API calls get the JSON envelope.
+CSRF_FAILURE_VIEW = 'accounts.api_errors.csrf_failure'
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/

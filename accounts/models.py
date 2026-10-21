@@ -40,3 +40,20 @@ def _user_role(user):
 # break the migrations that already exist, so the role stays in Profile and is
 # exposed as a read-only ``user.role`` property instead (documented deviation).
 User.role = property(_user_role)
+
+
+class LoginThrottle(models.Model):
+    """Failed-login counter for one username (MLE-SR-007c, SAD 4.3.7).
+
+    5 failed logins within 10 minutes block the account for 15 minutes.
+    Records are per username (lower case) so unknown names behave the same as
+    real ones and nothing is revealed about which accounts exist.
+    """
+
+    username = models.CharField(max_length=150, unique=True)
+    failure_count = models.PositiveSmallIntegerField(default=0)
+    window_started_at = models.DateTimeField(null=True, blank=True)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.username}: {self.failure_count} failures'
