@@ -106,3 +106,13 @@ def test_html_login_deactivated_account_refused(client, account):
     assert response.status_code == 200
     assert b'Incorrect username or password' in response.content
     assert '_auth_user_id' not in client.session
+
+def test_lock_expires_exactly_after_15_minutes(client, account, clock):
+    """A user can log in as soon as the 15-minute lockout expires."""
+    fail(client, 5)
+
+    clock(minutes=15)
+
+    response = api_login(client, 'Passw0rd1')
+    assert response.status_code == 200
+    assert '_auth_user_id' in client.session
