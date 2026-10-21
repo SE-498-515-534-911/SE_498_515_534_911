@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 
+from .models import SELF_REGISTRATION_ROLES, Role
 from .validators import validate_password_strength, validate_username_format
 
 User = get_user_model()
@@ -16,6 +17,13 @@ class RegistrationForm(forms.ModelForm):
         widget=forms.PasswordInput, validators=[validate_password_strength]
     )
     confirm_password = forms.CharField(widget=forms.PasswordInput)
+    # Only STUDENT and DATA_SCIENTIST are offered. A ChoiceField also rejects any
+    # other submitted value (such as ADMIN) on the server, even if the HTML form
+    # is tampered with (MLE-F-002).
+    role = forms.ChoiceField(
+        choices=[(r.value, r.label) for r in SELF_REGISTRATION_ROLES],
+        initial=Role.STUDENT,
+    )
 
     class Meta:
         model = User
@@ -46,6 +54,9 @@ class RegistrationForm(forms.ModelForm):
         user.set_password(self.cleaned_data['password'])
         if commit:
             user.save()
+            # The signal gave the new user a Student profile; apply the chosen role.
+            user.profile.role = self.cleaned_data['role']
+            user.profile.save()
         return user
 
 

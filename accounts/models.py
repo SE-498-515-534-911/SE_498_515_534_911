@@ -11,6 +11,11 @@ class Role(models.TextChoices):
     ADMIN = 'ADMIN', 'Admin'
 
 
+# Roles a visitor may pick when registering. ADMIN is deliberately absent: an
+# Admin is created only by an existing Admin or at installation (MLE-F-002).
+SELF_REGISTRATION_ROLES = (Role.STUDENT, Role.DATA_SCIENTIST)
+
+
 class Profile(models.Model):
     """Holds the single role of an account (US-17, MLE-F-002)."""
 

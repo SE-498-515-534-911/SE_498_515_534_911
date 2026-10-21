@@ -10,6 +10,7 @@ VALID = {
     'email': 'tejas@example.com',
     'password': 'Passw0rd1',
     'confirm_password': 'Passw0rd1',
+    'role': 'STUDENT',
 }
 
 
@@ -53,3 +54,24 @@ def test_duplicate_username_and_email_rejected():
     form = make_form(username='TEJAS_01', email='TEJAS@example.com')
     assert 'username' in form.errors
     assert 'email' in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('role', ['STUDENT', 'DATA_SCIENTIST'])
+def test_allowed_roles_are_saved_on_the_profile(role):
+    form = make_form(role=role)
+    assert form.is_valid(), form.errors
+    assert form.save().profile.role == role
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('role', ['ADMIN', 'admin', 'SUPERUSER', 'student', ''])
+def test_admin_and_unknown_roles_are_rejected(role):
+    form = make_form(role=role)
+    assert 'role' in form.errors
+
+
+@pytest.mark.django_db
+def test_missing_role_is_rejected():
+    data = {k: v for k, v in VALID.items() if k != 'role'}
+    assert 'role' in RegistrationForm(data).errors
