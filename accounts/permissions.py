@@ -6,6 +6,12 @@ from django.core.exceptions import PermissionDenied
 
 from .models import Role
 
+# Who may do what (SRS Table 4.1-1, SAD 4.3.2). Anything not listed is denied.
+# Student and Data Scientist have the same access to their own data; the Admin
+# manages accounts and cannot upload, prepare, train or read dataset contents.
+DATA_ROLES = (Role.STUDENT, Role.DATA_SCIENTIST)
+ADMIN_ROLES = (Role.ADMIN,)
+
 
 def get_role(user):
     """Return the user's role value, or None if anonymous or without a profile."""
@@ -47,3 +53,8 @@ class RoleRequiredMixin(AccessMixin):
         if get_role(request.user) not in {Role(r).value for r in self.allowed_roles}:
             raise PermissionDenied('Your role does not allow access to this page.')
         return super().dispatch(request, *args, **kwargs)
+
+
+# Ready-made decorators for the views of later stories (upload, train, runs...).
+data_user_required = role_required(*DATA_ROLES)
+admin_required = role_required(*ADMIN_ROLES)
