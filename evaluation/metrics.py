@@ -18,17 +18,20 @@ def _roc_auc(y_true, y_proba, classes):
     """ROC-AUC, or None when probabilities are missing or AUC is undefined."""
     if y_proba is None:
         return None
+    if len(set(np.asarray(y_true).tolist())) < 2:
+        return None  # AUC is undefined when the test split has a single class
     y_proba = np.asarray(y_proba, dtype=float)
     try:
         if len(classes) == 2:
             scores = y_proba if y_proba.ndim == 1 else y_proba[:, 1]
-            return float(roc_auc_score(y_true, scores, labels=classes))
-        return float(
-            roc_auc_score(y_true, y_proba, labels=classes, multi_class='ovr', average='macro')
-        )
+            auc = roc_auc_score(y_true, scores, labels=classes)
+        else:
+            auc = roc_auc_score(
+                y_true, y_proba, labels=classes, multi_class='ovr', average='macro'
+            )
     except ValueError:
-        # e.g. the test split contains only one of the classes
         return None
+    return None if np.isnan(auc) else float(auc)
 
 
 def compute_metrics(y_true, y_pred, y_proba=None, classes=None):
