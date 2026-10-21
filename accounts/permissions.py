@@ -11,8 +11,7 @@ def get_role(user):
     """Return the user's role value, or None if anonymous or without a profile."""
     if not user.is_authenticated:
         return None
-    profile = getattr(user, 'profile', None)
-    return profile.role if profile else None
+    return user.role
 
 
 def role_required(*roles):
