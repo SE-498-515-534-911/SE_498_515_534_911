@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -114,6 +115,15 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
+
+# Model artifacts
+# Stored outside any directory served by the web server (not under static or
+# media) and never exposed through a URL. Override with MODEL_ARTIFACT_ROOT.
+
+MODEL_ARTIFACT_ROOT = Path(
+    os.environ.get('MODEL_ARTIFACT_ROOT', BASE_DIR / 'private' / 'model_artifacts')
+)
 
 
 # Static files (CSS, JavaScript, Images)
