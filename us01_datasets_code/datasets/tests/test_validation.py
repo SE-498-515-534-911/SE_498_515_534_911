@@ -90,3 +90,12 @@ class ValidateUploadTests(SimpleTestCase):
 
     def test_blank_lines_ignored(self):
         validate_upload(up(make_csv(20, 2) + b"\n\n"))
+
+
+    def test_formula_like_values_are_treated_as_data(self):
+        rows = ["=1+1,+value,-value,@value"]
+        rows.extend("ordinary,value,ordinary,value" for _ in range(19))
+        data = ("col1,col2,col3,col4\n" + "\n".join(rows) + "\n").encode()
+
+        info = validate_upload(up(data))
+        self.assertEqual((info.rows, info.columns), (20, 4))
