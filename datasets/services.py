@@ -103,7 +103,7 @@ def upload_dataset(user, uploaded, display_name=None):
         stored.unlink(missing_ok=True)
         raise
 
-
+        
 def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
     """Create a validated, stratified train/test split for classification."""
     if target_column not in dataframe.columns:
@@ -152,7 +152,7 @@ def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
 
     return X_train, X_test, y_train, y_test
 
-
+ 
 def preprocess_dataframe(dataframe, strategy):
     """Handle missing values and one-hot encode categorical columns."""
     if not isinstance(dataframe, pd.DataFrame):
@@ -225,5 +225,4 @@ def preprocess_dataframe(dataframe, strategy):
             columns=categorical_columns,
             dtype=int,
         )
-
-    return result.reset_index(drop=True)
+     return result.reset_index(drop=True)
