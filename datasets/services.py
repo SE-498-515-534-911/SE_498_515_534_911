@@ -1,4 +1,3 @@
-
 """Shared dataset upload, profiling, and preprocessing services."""
 
 import csv
@@ -185,7 +184,6 @@ def preprocess_dataframe(dataframe, strategy):
             for column in numeric_columns:
                 if result[column].isna().any():
                     non_missing = result[column].dropna()
-
                     if non_missing.empty:
                         raise ValueError(
                             f"Column '{column}' contains only missing values."
@@ -205,7 +203,6 @@ def preprocess_dataframe(dataframe, strategy):
         for column in columns_to_fill:
             if result[column].isna().any():
                 non_missing = result[column].dropna()
-
                 if non_missing.empty:
                     raise ValueError(
                         f"Column '{column}' contains only missing values."
