@@ -3,7 +3,7 @@ import csv
 import io
 import json
 import tempfile
-
+import pandas as pd
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from accounts.models import Profile, Role
 from .models import Dataset
 
+from .services import split_dataset
 
 class DatasetUploadTests(TestCase):
     def setUp(self):
@@ -114,3 +115,96 @@ class DatasetUploadTests(TestCase):
 
         response = self.client.post("/api/upload", {})
         self.assertEqual(response.status_code, 400)
+
+
+class DatasetSplitTests(TestCase):
+    def test_creates_stratified_train_test_split(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(100)),
+            "target": ["A"] * 50 + ["B"] * 50,
+        })
+
+        X_train, X_test, y_train, y_test = split_dataset(
+            dataframe,
+            target_column="target",
+        )
+
+        self.assertEqual(len(X_test), 20)
+        self.assertEqual(len(X_train), 80)
+        self.assertEqual(set(y_train.unique()), {"A", "B"})
+        self.assertEqual(set(y_test.unique()), {"A", "B"})
+        self.assertEqual(len(X_train), len(y_train))
+        self.assertEqual(len(X_test), len(y_test))
+
+
+    def test_rejects_missing_target_column(self):
+        dataframe = pd.DataFrame({
+            "feature": [1, 2, 3, 4],
+            "target": ["A", "A", "B", "B"],
+        })
+
+        with self.assertRaisesRegex(ValueError, "Target column does not exist"):
+            split_dataset(dataframe, target_column="unknown")
+
+    def test_rejects_invalid_test_size(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(20)),
+            "target": ["A"] * 10 + ["B"] * 10,
+        })
+
+        with self.assertRaisesRegex(ValueError, "Test size"):
+            split_dataset(dataframe, target_column="target", test_size=0.12)
+
+    def test_rejects_target_with_only_one_class(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(4)),
+            "target": ["A"] * 4,
+        })
+
+        with self.assertRaisesRegex(ValueError, "between 2 and 20 classes"):
+            split_dataset(dataframe, target_column="target")
+
+    def test_rejects_class_with_only_one_row(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(5)),
+            "target": ["A", "A", "B", "B", "C"],
+        })
+
+        with self.assertRaisesRegex(ValueError, "at least 2 rows"):
+            split_dataset(dataframe, target_column="target")
+
+
+    def test_rejects_missing_target_values(self):
+        dataframe = pd.DataFrame({
+            "feature": [1, 2, 3, 4],
+            "target": ["A", "A", "B", None],
+        })
+
+        with self.assertRaisesRegex(ValueError, "missing values"):
+            split_dataset(dataframe, target_column="target")
+
+    def test_rejects_more_than_twenty_classes(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(42)),
+            "target": [
+                label
+                for label in range(21)
+                for _ in range(2)
+            ],
+        })
+
+        with self.assertRaisesRegex(ValueError, "between 2 and 20 classes"):
+            split_dataset(dataframe, target_column="target")
+
+    def test_rejects_impossible_stratified_split(self):
+        dataframe = pd.DataFrame({
+            "feature": list(range(10)),
+            "target": ["A"] * 5 + ["B"] * 5,
+        })
+
+        with self.assertRaisesRegex(ValueError, "Cannot create a stratified split"):
+            split_dataset(
+                dataframe,
+                target_column="target",
+                test_size=0.10,
+            )

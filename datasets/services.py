@@ -1,14 +1,16 @@
 
-"""Shared dataset upload, profiling, and preprocessing services."""
+"""Shared dataset upload, profiling, preprocessing, and splitting services."""
 
 import csv
 import math
 import os
 import uuid
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
+from sklearn.model_selection import train_test_split
 
 from .errors import Unprocessable
 from .models import Dataset
@@ -19,7 +21,7 @@ SUPPORTED_STRATEGIES = {"drop_rows", "mean", "median", "most_frequent"}
 
 
 def profile_csv(file_path):
-    """Return the first 20 rows and per-column type and missing-value counts."""
+    """Return a preview and per-column type and missing-value counts."""
     with open(file_path, "r", encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
         headers = reader.fieldnames or []
@@ -38,6 +40,7 @@ def profile_csv(file_path):
                     continue
 
                 has_value[header] = True
+
                 try:
                     number = float(value)
                     if not math.isfinite(number):
@@ -66,7 +69,7 @@ def profile_csv(file_path):
 
 
 def upload_dataset(user, uploaded, display_name=None):
-    """Validate, store and profile a CSV, then create its Dataset record."""
+    """Validate, store, and profile a CSV before creating its Dataset record."""
     if Dataset.objects.filter(owner=user).count() >= MAX_DATASETS_PER_USER:
         raise Unprocessable(
             f"You already have {MAX_DATASETS_PER_USER} stored datasets. "
@@ -104,7 +107,7 @@ def upload_dataset(user, uploaded, display_name=None):
 
 
 def preprocess_dataframe(dataframe, strategy):
-    """Handle missing values and one-hot encode categorical columns."""
+    """Impute missing values and one-hot encode categorical columns."""
     if not isinstance(dataframe, pd.DataFrame):
         raise ValueError("Input must be a pandas DataFrame.")
 
@@ -134,6 +137,7 @@ def preprocess_dataframe(dataframe, strategy):
             for column in numeric_columns:
                 if result[column].isna().any():
                     non_missing = result[column].dropna()
+
                     if non_missing.empty:
                         raise ValueError(
                             f"Column '{column}' contains only missing values."
@@ -153,6 +157,7 @@ def preprocess_dataframe(dataframe, strategy):
         for column in columns_to_fill:
             if result[column].isna().any():
                 non_missing = result[column].dropna()
+
                 if non_missing.empty:
                     raise ValueError(
                         f"Column '{column}' contains only missing values."
@@ -177,3 +182,59 @@ def preprocess_dataframe(dataframe, strategy):
         )
 
     return result.reset_index(drop=True)
+
+
+def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
+    """Create a validated, stratified train/test split for classification."""
+    if not isinstance(dataframe, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame.")
+
+    if dataframe.empty or len(dataframe.columns) == 0:
+        raise ValueError("Dataset must contain rows and columns.")
+
+    if target_column not in dataframe.columns:
+        raise ValueError("Target column does not exist.")
+
+    if (
+        isinstance(test_size, bool)
+        or not isinstance(test_size, (int, float))
+        or not math.isfinite(test_size)
+        or test_size < 0.10
+        or test_size > 0.50
+        or round(test_size * 100) % 5 != 0
+    ):
+        raise ValueError(
+            "Test size must be from 10% to 50% in steps of 5%."
+        )
+
+    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+        raise ValueError("Random seed must be an integer.")
+
+    if dataframe[target_column].isna().any():
+        raise ValueError("Target column must not contain missing values.")
+
+    class_counts = Counter(dataframe[target_column].tolist())
+
+    if not 2 <= len(class_counts) <= 20:
+        raise ValueError("Target must contain between 2 and 20 classes.")
+
+    if any(count < 2 for count in class_counts.values()):
+        raise ValueError("Every target class must contain at least 2 rows.")
+
+    features = dataframe.drop(columns=[target_column])
+    target = dataframe[target_column]
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            features,
+            target,
+            test_size=test_size,
+            random_state=random_seed,
+            stratify=target,
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot create a stratified split with these settings: {exc}"
+        ) from exc
+
+    return X_train, X_test, y_train, y_test
