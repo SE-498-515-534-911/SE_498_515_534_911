@@ -99,3 +99,57 @@ def upload_dataset(user, uploaded, display_name=None):
     except Exception:
         stored.unlink(missing_ok=True)
         raise
+
+
+from collections import Counter
+
+from sklearn.model_selection import train_test_split
+
+
+def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
+    """Create a validated, stratified train/test split for classification."""
+    if target_column not in dataframe.columns:
+        raise ValueError("Target column does not exist.")
+
+    if (
+        isinstance(test_size, bool)
+        or not isinstance(test_size, (int, float))
+        or test_size < 0.10
+        or test_size > 0.50
+        or round(test_size * 100) % 5 != 0
+    ):
+        raise ValueError(
+            "Test size must be from 10% to 50% in steps of 5%."
+        )
+
+    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+        raise ValueError("Random seed must be an integer.")
+
+    if dataframe[target_column].isna().any():
+        raise ValueError("Target column must not contain missing values.")
+
+    class_counts = Counter(dataframe[target_column].tolist())
+
+    if not 2 <= len(class_counts) <= 20:
+        raise ValueError("Target must contain between 2 and 20 classes.")
+
+    if any(count < 2 for count in class_counts.values()):
+        raise ValueError("Every target class must contain at least 2 rows.")
+
+    features = dataframe.drop(columns=[target_column])
+    target = dataframe[target_column]
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            features,
+            target,
+            test_size=test_size,
+            random_state=random_seed,
+            stratify=target,
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot create a stratified split with these settings: {exc}"
+        ) from exc
+
+    return X_train, X_test, y_train, y_test
