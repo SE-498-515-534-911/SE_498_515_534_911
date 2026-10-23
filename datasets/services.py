@@ -1,4 +1,5 @@
-"""Shared dataset upload, profiling, and preprocessing services."""
+
+"""Shared dataset upload, profiling, preprocessing, and splitting services."""
 
 import csv
 import math
@@ -20,7 +21,7 @@ SUPPORTED_STRATEGIES = {"drop_rows", "mean", "median", "most_frequent"}
 
 
 def profile_csv(file_path):
-    """Return the first 20 rows and per-column type and missing-value counts."""
+    """Return a preview and per-column type and missing-value counts."""
     with open(file_path, "r", encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
         headers = reader.fieldnames or []
@@ -39,6 +40,7 @@ def profile_csv(file_path):
                     continue
 
                 has_value[header] = True
+
                 try:
                     number = float(value)
                     if not math.isfinite(number):
@@ -67,7 +69,7 @@ def profile_csv(file_path):
 
 
 def upload_dataset(user, uploaded, display_name=None):
-    """Validate, store and profile a CSV, then create its Dataset record."""
+    """Validate, store, and profile a CSV before creating its Dataset record."""
     if Dataset.objects.filter(owner=user).count() >= MAX_DATASETS_PER_USER:
         raise Unprocessable(
             f"You already have {MAX_DATASETS_PER_USER} stored datasets. "
@@ -103,15 +105,100 @@ def upload_dataset(user, uploaded, display_name=None):
         stored.unlink(missing_ok=True)
         raise
 
-        
+
+def preprocess_dataframe(dataframe, strategy):
+    """Impute missing values and one-hot encode categorical columns."""
+    if not isinstance(dataframe, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame.")
+
+    if dataframe.empty or len(dataframe.columns) == 0:
+        raise ValueError("Dataset must contain rows and columns.")
+
+    if strategy not in SUPPORTED_STRATEGIES:
+        raise ValueError(
+            "Unsupported strategy. Choose one of: "
+            f"{', '.join(sorted(SUPPORTED_STRATEGIES))}."
+        )
+
+    result = dataframe.copy()
+
+    if strategy == "drop_rows":
+        result = result.dropna().reset_index(drop=True)
+    else:
+        numeric_columns = result.select_dtypes(
+            include="number"
+        ).columns.tolist()
+
+        categorical_columns = result.select_dtypes(
+            include=["object", "category", "string", "bool"]
+        ).columns.tolist()
+
+        if strategy in {"mean", "median"}:
+            for column in numeric_columns:
+                if result[column].isna().any():
+                    non_missing = result[column].dropna()
+
+                    if non_missing.empty:
+                        raise ValueError(
+                            f"Column '{column}' contains only missing values."
+                        )
+
+                    fill_value = (
+                        non_missing.mean()
+                        if strategy == "mean"
+                        else non_missing.median()
+                    )
+                    result[column] = result[column].fillna(fill_value)
+
+            columns_to_fill = categorical_columns
+        else:
+            columns_to_fill = result.columns.tolist()
+
+        for column in columns_to_fill:
+            if result[column].isna().any():
+                non_missing = result[column].dropna()
+
+                if non_missing.empty:
+                    raise ValueError(
+                        f"Column '{column}' contains only missing values."
+                    )
+
+                result[column] = result[column].fillna(
+                    non_missing.mode().iloc[0]
+                )
+
+    if result.empty:
+        raise ValueError("Preprocessing removed all rows.")
+
+    categorical_columns = result.select_dtypes(
+        include=["object", "category", "string", "bool"]
+    ).columns.tolist()
+
+    if categorical_columns:
+        result = pd.get_dummies(
+            result,
+            columns=categorical_columns,
+            dtype=int,
+        )
+
+    return result.reset_index(drop=True)
+
+
 def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
     """Create a validated, stratified train/test split for classification."""
+    if not isinstance(dataframe, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame.")
+
+    if dataframe.empty or len(dataframe.columns) == 0:
+        raise ValueError("Dataset must contain rows and columns.")
+
     if target_column not in dataframe.columns:
         raise ValueError("Target column does not exist.")
 
     if (
         isinstance(test_size, bool)
         or not isinstance(test_size, (int, float))
+        or not math.isfinite(test_size)
         or test_size < 0.10
         or test_size > 0.50
         or round(test_size * 100) % 5 != 0
@@ -151,78 +238,3 @@ def split_dataset(dataframe, target_column, test_size=0.20, random_seed=42):
         ) from exc
 
     return X_train, X_test, y_train, y_test
-
- 
-def preprocess_dataframe(dataframe, strategy):
-    """Handle missing values and one-hot encode categorical columns."""
-    if not isinstance(dataframe, pd.DataFrame):
-        raise ValueError("Input must be a pandas DataFrame.")
-
-    if dataframe.empty or len(dataframe.columns) == 0:
-        raise ValueError("Dataset must contain rows and columns.")
-
-    if strategy not in SUPPORTED_STRATEGIES:
-        raise ValueError(
-            "Unsupported strategy. Choose one of: "
-            f"{', '.join(sorted(SUPPORTED_STRATEGIES))}."
-        )
-
-    result = dataframe.copy()
-
-    if strategy == "drop_rows":
-        result = result.dropna().reset_index(drop=True)
-    else:
-        numeric_columns = result.select_dtypes(
-            include="number"
-        ).columns.tolist()
-
-        categorical_columns = result.select_dtypes(
-            include=["object", "category", "string", "bool"]
-        ).columns.tolist()
-
-        if strategy in {"mean", "median"}:
-            for column in numeric_columns:
-                if result[column].isna().any():
-                    non_missing = result[column].dropna()
-                    if non_missing.empty:
-                        raise ValueError(
-                            f"Column '{column}' contains only missing values."
-                        )
-
-                    fill_value = (
-                        non_missing.mean()
-                        if strategy == "mean"
-                        else non_missing.median()
-                    )
-                    result[column] = result[column].fillna(fill_value)
-
-            columns_to_fill = categorical_columns
-        else:
-            columns_to_fill = result.columns.tolist()
-
-        for column in columns_to_fill:
-            if result[column].isna().any():
-                non_missing = result[column].dropna()
-                if non_missing.empty:
-                    raise ValueError(
-                        f"Column '{column}' contains only missing values."
-                    )
-
-                result[column] = result[column].fillna(
-                    non_missing.mode().iloc[0]
-                )
-
-    if result.empty:
-        raise ValueError("Preprocessing removed all rows.")
-
-    categorical_columns = result.select_dtypes(
-        include=["object", "category", "string", "bool"]
-    ).columns.tolist()
-
-    if categorical_columns:
-        result = pd.get_dummies(
-            result,
-            columns=categorical_columns,
-            dtype=int,
-        )
-     return result.reset_index(drop=True)
