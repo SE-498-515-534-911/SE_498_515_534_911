@@ -122,10 +122,10 @@ USE_TZ = True
 # Stored outside any directory served by the web server (not under static or
 # media) and never exposed through a URL. Override with MODEL_ARTIFACT_ROOT.
 
-MODEL_ARTIFACT_ROOT = Path(
-    os.environ.get('MODEL_ARTIFACT_ROOT', BASE_DIR / 'private' / 'model_artifacts')
+# Uploaded datasets are stored outside directories served by the web server.
+DATA_ROOT = Path(
+    os.environ.get('DATA_ROOT', BASE_DIR / 'private' / 'datasets')
 )
-
 
 # Authentication
 
