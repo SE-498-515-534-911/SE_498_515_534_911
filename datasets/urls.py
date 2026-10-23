@@ -1,11 +1,10 @@
-
 from django.urls import path
 
 from . import views
 
 urlpatterns = [
     path(
-        "preprocess",
+        "api/datasets/preprocess",
         views.preprocess_dataset,
         name="dataset_preprocess",
     ),
