@@ -1,0 +1,356 @@
+From f89d57370ee07f5ac29edb86c54817ae262499dc Mon Sep 17 00:00:00 2001
+From: Varnika Sadineni <sadinenivarnika@gmail.com>
+Date: Sat, 24 Oct 2026 14:03:21 +0000
+Subject: [PATCH 02/12] US-07: validate hyperparameters against the catalogue
+ ranges (MLE-F-008)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016AqNySb7TZhbVjmWvUchag
+---
+ docs/member2/stories/US-07-hyperparameters.md | 41 +++++++++
+ training/params.py                            | 80 +++++++++++++++++
+ training/tests/test_api_params.py             | 43 +++++++++
+ training/tests/test_params.py                 | 90 +++++++++++++++++++
+ training/urls.py                              |  1 +
+ training/views.py                             | 28 +++++-
+ 6 files changed, 281 insertions(+), 2 deletions(-)
+ create mode 100644 docs/member2/stories/US-07-hyperparameters.md
+ create mode 100644 training/params.py
+ create mode 100644 training/tests/test_api_params.py
+ create mode 100644 training/tests/test_params.py
+
+diff --git a/docs/member2/stories/US-07-hyperparameters.md b/docs/member2/stories/US-07-hyperparameters.md
+new file mode 100644
+index 0000000..c6f4a8a
+--- /dev/null
++++ b/docs/member2/stories/US-07-hyperparameters.md
+@@ -0,0 +1,41 @@
++# US-07: Set hyperparameters
++
++| | |
++| --- | --- |
++| Epic | WBMME-2 Model Training & Selection |
++| Requirement | MLE-F-008 |
++| Points / sprint | 5 / Sprint 1 |
++| Owner | Varnika (Member 2) |
++| SAD component | Model Selection & Training |
++| Design reference | DS-Model-02 |
++
++**Story.** As a Data Scientist I want to edit a model's hyperparameters, and be told clearly when a value is not allowed, so that I can tune a model without breaking it.
++
++## Acceptance criteria (SRS MLE-F-008, TC-MODEL-01 step 3)
++
++- [x] At least two hyperparameters per model are editable (every catalogue model has two).
++- [x] A value outside its range, of the wrong type, or for an unknown setting is refused before training starts.
++- [x] The message names the parameter and its permitted range, for example `C must be a number between 0.01 and 100.`
++- [x] Boundary values are accepted (for example C = 0.01 and C = 100) and values just outside are refused (0.009 and 100.01).
++- [x] Settings left out take the catalogue default.
++- [x] All problems are reported together, not one at a time.
++
++## Files
++
++| File | Purpose |
++| --- | --- |
++| `training/params.py` | `validate_params(model_key, raw)` returning clean params and a list of `ParamError` |
++| `training/views.py`, `urls.py` | `POST /api/models/<key>/params/validate` |
++| `training/tests/test_params.py`, `test_api_params.py` | Boundary-value and API tests, tagged `req("MLE-F-008")` |
++
++## API
++
++```
++POST /api/models/logistic_regression/params/validate
++{"params": {"C": -5}}
++
++400 {"error": "invalid_params", "message": "Some settings are outside their permitted range.",
++     "details": [{"field": "params.C", "message": "C must be a number between 0.01 and 100."}]}
++```
++
++`POST /api/train` (US-08) calls the same `validate_params`, so the check cannot be bypassed.
+diff --git a/training/params.py b/training/params.py
+new file mode 100644
+index 0000000..061b04f
+--- /dev/null
++++ b/training/params.py
+@@ -0,0 +1,80 @@
++"""Hyperparameter validation (US-07, MLE-F-008).
++
++Every value is checked BEFORE training starts. A refusal names the parameter and
++its permitted range, as MLE-F-008 requires, e.g. "C must be a number between 0.01 and 100."
++"""
++from __future__ import annotations
++
++import math
++from dataclasses import dataclass
++
++from .catalogue import ParamSpec, get_model
++
++
++@dataclass(frozen=True)
++class ParamError:
++    param: str
++    message: str
++
++    def as_dict(self) -> dict:
++        return {"field": f"params.{self.param}" if self.param != "params" else "params", "message": self.message}
++
++
++def _is_int(value) -> bool:
++    # bool is a subclass of int in Python; True/False are not valid numbers here.
++    return isinstance(value, int) and not isinstance(value, bool)
++
++
++def _is_real(value) -> bool:
++    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
++
++
++def _check_one(spec: ParamSpec, value) -> str | None:
++    """Return an error message, or None when `value` is acceptable for `spec`."""
++    problem = f"{spec.name} must be {spec.range_text()}."
++    if spec.kind == "int_or_none" and value is None:
++        return None
++    if spec.kind in ("int", "int_or_none"):
++        if not _is_int(value) or not spec.minimum <= value <= spec.maximum:
++            return problem
++        return None
++    if spec.kind == "float":
++        if not _is_real(value) or not spec.minimum <= value <= spec.maximum:
++            return problem
++        return None
++    if spec.kind == "choice":
++        if not isinstance(value, str) or value not in spec.choices:
++            return problem
++        return None
++    raise ValueError(f"unknown parameter kind {spec.kind!r}")  # pragma: no cover
++
++
++def validate_params(model_key: str, raw) -> tuple[dict, list[ParamError]]:
++    """Validate user-supplied hyperparameters for a catalogue model.
++
++    Returns (clean_params, errors). `clean_params` always contains every
++    parameter of the model: user values where given, catalogue defaults otherwise.
++    When `errors` is not empty the caller must refuse the request.
++    """
++    spec = get_model(model_key)  # raises UnknownModel for a key outside the catalogue
++    if raw is None:
++        raw = {}
++    if not isinstance(raw, dict):
++        return {}, [ParamError("params", "params must be a JSON object, for example {\"C\": 1.0}.")]
++
++    errors: list[ParamError] = []
++    known = {p.name for p in spec.params}
++    for name in raw:
++        if name not in known:
++            allowed = ", ".join(sorted(known))
++            errors.append(ParamError(str(name), f"{name} is not a setting of {spec.label}. Allowed settings: {allowed}."))
++
++    clean = spec.defaults()
++    for p in spec.params:
++        if p.name in raw:
++            message = _check_one(p, raw[p.name])
++            if message:
++                errors.append(ParamError(p.name, message))
++            else:
++                clean[p.name] = raw[p.name]
++    return clean, errors
+diff --git a/training/tests/test_api_params.py b/training/tests/test_api_params.py
+new file mode 100644
+index 0000000..3f72328
+--- /dev/null
++++ b/training/tests/test_api_params.py
+@@ -0,0 +1,43 @@
++import json
++
++import pytest
++
++pytestmark = [pytest.mark.req("MLE-F-008"), pytest.mark.django_db]
++
++
++def post(client, key, payload):
++    return client.post(f"/api/models/{key}/params/validate", data=json.dumps(payload), content_type="application/json")
++
++
++def test_requires_login(client):
++    assert post(client, "knn", {"params": {}}).status_code == 401
++
++
++def test_valid_params_return_the_complete_set(auth_client):
++    response = post(auth_client, "logistic_regression", {"params": {"C": 2.5}})
++    assert response.status_code == 200
++    assert response.json() == {"valid": True, "model": "logistic_regression", "params": {"C": 2.5, "max_iter": 200}}
++
++
++def test_negative_c_is_refused_with_a_message_naming_the_parameter(auth_client):
++    response = post(auth_client, "logistic_regression", {"params": {"C": -5}})
++    assert response.status_code == 400
++    body = response.json()
++    assert body["error"] == "invalid_params"
++    assert body["details"] == [{"field": "params.C", "message": "C must be a number between 0.01 and 100."}]
++
++
++def test_unknown_model_is_404(auth_client):
++    response = post(auth_client, "svm", {"params": {}})
++    assert response.status_code == 404
++    assert response.json()["error"] == "unknown_model"
++
++
++def test_malformed_json_is_400(auth_client):
++    response = auth_client.post("/api/models/knn/params/validate", data="{not json", content_type="application/json")
++    assert response.status_code == 400
++    assert response.json()["error"] == "bad_request"
++
++
++def test_get_is_not_allowed(auth_client):
++    assert auth_client.get("/api/models/knn/params/validate").status_code == 405
+diff --git a/training/tests/test_params.py b/training/tests/test_params.py
+new file mode 100644
+index 0000000..0028543
+--- /dev/null
++++ b/training/tests/test_params.py
+@@ -0,0 +1,90 @@
++"""US-07 / MLE-F-008: hyperparameter validation, including boundary values."""
++import math
++
++import pytest
++
++from training.catalogue import UnknownModel
++from training.params import validate_params
++
++pytestmark = pytest.mark.req("MLE-F-008")
++
++
++def errors_for(model, params):
++    return {e.param: e.message for e in validate_params(model, params)[1]}
++
++
++def test_empty_params_give_the_catalogue_defaults():
++    clean, errors = validate_params("logistic_regression", {})
++    assert errors == []
++    assert clean == {"C": 1.0, "max_iter": 200}
++    assert validate_params("knn", None)[0] == {"n_neighbors": 5, "weights": "uniform"}
++
++
++def test_user_values_override_defaults_and_unset_ones_keep_defaults():
++    clean, errors = validate_params("random_forest", {"n_estimators": 50})
++    assert errors == []
++    assert clean == {"n_estimators": 50, "max_depth": None}
++
++
++@pytest.mark.parametrize(
++    "model, name, good",
++    [
++        ("logistic_regression", "C", [0.01, 1, 100, 100.0]),
++        ("logistic_regression", "max_iter", [100, 1000]),
++        ("knn", "n_neighbors", [1, 50]),
++        ("knn", "weights", ["uniform", "distance"]),
++        ("decision_tree", "max_depth", [None, 1, 50]),
++        ("decision_tree", "min_samples_split", [2, 20]),
++        ("random_forest", "n_estimators", [10, 200]),
++        ("random_forest", "max_depth", [None, 1, 50]),
++    ],
++)
++def test_values_on_the_boundary_and_inside_are_accepted(model, name, good):
++    for value in good:
++        assert errors_for(model, {name: value}) == {}, (name, value)
++
++
++@pytest.mark.parametrize(
++    "model, name, bad",
++    [
++        ("logistic_regression", "C", [0, 0.009, 100.01, -5, math.inf, math.nan, "1.0", True, [1]]),
++        ("logistic_regression", "max_iter", [99, 1001, 200.5, "200", True, None]),
++        ("knn", "n_neighbors", [0, 51, 5.5, -1, None]),
++        ("knn", "weights", ["manhattan", "", 1, None]),
++        ("decision_tree", "max_depth", [0, 51, 3.5, "none", False]),
++        ("decision_tree", "min_samples_split", [1, 21, None]),
++        ("random_forest", "n_estimators", [9, 201, 0, 100.0, None]),
++        ("random_forest", "max_depth", [0, 51, "deep"]),
++    ],
++)
++def test_values_just_outside_or_of_the_wrong_type_are_refused(model, name, bad):
++    for value in bad:
++        assert name in errors_for(model, {name: value}), (name, value)
++
++
++def test_error_message_names_the_parameter_and_its_range():
++    # Test data of TC-MODEL-01: C = -5 must be refused with a validation message.
++    message = errors_for("logistic_regression", {"C": -5})["C"]
++    assert message == "C must be a number between 0.01 and 100."
++    assert errors_for("knn", {"weights": "x"})["weights"] == "weights must be one of: uniform, distance."
++
++
++def test_unknown_parameter_is_refused_and_lists_allowed_ones():
++    message = errors_for("knn", {"algorithm": "kd_tree"})["algorithm"]
++    assert "not a setting of k-Nearest Neighbours" in message
++    assert "n_neighbors" in message and "weights" in message
++
++
++def test_all_problems_are_reported_together():
++    errors = errors_for("logistic_regression", {"C": -1, "max_iter": 5, "bogus": 1})
++    assert set(errors) == {"C", "max_iter", "bogus"}
++
++
++def test_params_must_be_an_object():
++    clean, errors = validate_params("knn", [1, 2])
++    assert clean == {} and errors[0].param == "params"
++
++
++def test_unknown_model_raises():
++    with pytest.raises(UnknownModel):
++        validate_params("svm", {})
+diff --git a/training/urls.py b/training/urls.py
+index 9af9ca9..1e456ce 100644
+--- a/training/urls.py
++++ b/training/urls.py
+@@ -4,4 +4,5 @@ from . import views
+ 
+ urlpatterns = [
+     path("models", views.list_models, name="models"),
++    path("models/<str:key>/params/validate", views.validate_model_params, name="validate-params"),
+ ]
+diff --git a/training/views.py b/training/views.py
+index 473b679..32f7c24 100644
+--- a/training/views.py
++++ b/training/views.py
+@@ -1,9 +1,10 @@
+ """Training API views (SAD 3.4: API Gateway & Controllers delegate to services)."""
+ from django.http import JsonResponse
+-from django.views.decorators.http import require_GET
++from django.views.decorators.http import require_GET, require_POST
+ 
+ from . import catalogue
+-from .http import api_login_required
++from .http import BadJson, api_login_required, error_response, parse_json_object
++from .params import validate_params
+ 
+ 
+ @require_GET
+@@ -11,3 +12,26 @@ from .http import api_login_required
+ def list_models(request):
+     """GET /api/models: the model catalogue with defaults and permitted ranges (MLE-F-007)."""
+     return JsonResponse({"models": [m.describe() for m in catalogue.list_models()]})
++
++
++@require_POST
++@api_login_required
++def validate_model_params(request, key):
++    """POST /api/models/<key>/params/validate: check hyperparameters before training (MLE-F-008).
++
++    Body: {"params": {...}}. Returns 200 with the complete parameter set (defaults filled in),
++    or 400 listing every problem with the parameter name and its permitted range.
++    """
++    try:
++        catalogue.get_model(key)
++    except catalogue.UnknownModel:
++        return error_response(404, "unknown_model", f"There is no model called '{key}' in the catalogue.")
++    try:
++        body = parse_json_object(request)
++    except BadJson as exc:
++        return error_response(400, "bad_request", str(exc))
++    clean, errors = validate_params(key, body.get("params"))
++    if errors:
++        return error_response(400, "invalid_params", "Some settings are outside their permitted range.",
++                              [e.as_dict() for e in errors])
++    return JsonResponse({"valid": True, "model": key, "params": clean})
+-- 
+2.43.0
+

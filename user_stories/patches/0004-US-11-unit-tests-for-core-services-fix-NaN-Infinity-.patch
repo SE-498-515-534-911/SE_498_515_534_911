@@ -1,0 +1,280 @@
+From 73eb6051623ccd68375c421be799460cfa19b741 Mon Sep 17 00:00:00 2001
+From: Varnika Sadineni <sadinenivarnika@gmail.com>
+Date: Sat, 24 Oct 2026 14:09:30 +0000
+Subject: [PATCH 04/12] US-11: unit tests for core services; fix NaN/Infinity
+ test_size crash
+
+Direct unit tests for schema, locator, artifacts, run model, job runner and
+JSON parsing. 100% statement coverage of training/. The new tests found that
+test_size of NaN or Infinity would raise a 500; now a 400.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016AqNySb7TZhbVjmWvUchag
+---
+ docs/member2/stories/US-11-unit-tests.md |  40 ++++++
+ training/schemas.py                      |   3 +
+ training/tests/test_api_train.py         |   7 +
+ training/tests/test_services_unit.py     | 168 +++++++++++++++++++++++
+ 4 files changed, 218 insertions(+)
+ create mode 100644 docs/member2/stories/US-11-unit-tests.md
+ create mode 100644 training/tests/test_services_unit.py
+
+diff --git a/docs/member2/stories/US-11-unit-tests.md b/docs/member2/stories/US-11-unit-tests.md
+new file mode 100644
+index 0000000..b54533a
+--- /dev/null
++++ b/docs/member2/stories/US-11-unit-tests.md
+@@ -0,0 +1,40 @@
++# US-11: Unit tests for core services
++
++| | |
++| --- | --- |
++| Epic | Quality / Test Plan section 5 |
++| Requirement | Test Plan 5 (unit testing); supports MLE-F-007, MLE-F-008, MLE-F-009 |
++| Points / sprint | 5 / Sprint 1 |
++| Owner | Varnika (Member 2) |
++
++**Story.** As a developer I want each core service tested on its own, so that a failure points at the broken service and not at the page in front of it.
++
++## Acceptance criteria
++
++- [x] Catalogue, parameter validation, request validation, data pipeline, artifact storage, dataset locator, job runner and the run model each have direct unit tests.
++- [x] Boundary values are tested on both sides (just inside, just outside) for every numeric range.
++- [x] Failure paths are tested, not only the happy path.
++- [x] Every test is tagged with the requirement it covers (`req("MLE-F-...")`), so the Requirement Traceability Matrix can be filled from the test run.
++- [x] Statement coverage of the `training` package is 100% (target in the Test Plan: at least 80%).
++- [x] Tests need no network, no real dataset and no leftover files; each test gets its own temp folders.
++
++## Result
++
++**139 tests pass, 100% statement coverage of `training/`.**
++
++Run from the repository root:
++
++```
++python -I -m pytest -c member2_dev/pytest.ini -p no:cacheprovider --cov=training --cov-report=term-missing
++```
++
++## Defect found by these tests
++
++`test_bad_test_sizes[nan]` showed that a JSON body with `"test_size": NaN` (or `Infinity`), which Python's JSON parser accepts, crashed `_valid_test_size` and would have returned a 500 error. Fixed with a finiteness check in `training/schemas.py`; regression tests added at unit and API level.
++
++## Files
++
++| File | Purpose |
++| --- | --- |
++| `training/tests/test_services_unit.py` | Direct tests of schema, locator, artifacts, run model, job runner and JSON parsing |
++| `training/tests/conftest.py` | Isolated storage fixtures, sample dataset |
+diff --git a/training/schemas.py b/training/schemas.py
+index be52b82..00dc639 100644
+--- a/training/schemas.py
++++ b/training/schemas.py
+@@ -1,6 +1,7 @@
+ """Validation of the POST /api/train request body (SRS MLE-F-006, MLE-F-007, MLE-F-008)."""
+ from __future__ import annotations
+ 
++import math
+ from dataclasses import dataclass
+ 
+ from . import catalogue
+@@ -30,6 +31,8 @@ def _valid_test_size(v) -> bool:
+     """10% to 50% in steps of 5% (MLE-F-006)."""
+     if isinstance(v, bool) or not isinstance(v, (int, float)):
+         return False
++    if not math.isfinite(v):  # JSON allows NaN and Infinity
++        return False
+     steps = v * 20
+     return abs(steps - round(steps)) < 1e-9 and 2 <= round(steps) <= 10
+ 
+diff --git a/training/tests/test_api_train.py b/training/tests/test_api_train.py
+index 579add6..fd073fa 100644
+--- a/training/tests/test_api_train.py
++++ b/training/tests/test_api_train.py
+@@ -176,3 +176,10 @@ def test_artifact_write_is_atomic(user, tmp_path, settings, monkeypatch):
+         artifacts.save({"x": 1}, user.pk, 9)
+     assert not artifacts.artifact_path(user.pk, 9).exists()
+     assert not list(artifacts.user_dir(user.pk).glob("*.tmp"))
++
++
++@pytest.mark.parametrize("raw", ["NaN", "Infinity", "-Infinity"])
++def test_non_finite_numbers_get_400_not_500(auth_client, dataset, raw):
++    body = '{"dataset_id": 1, "target": "label", "model": "knn", "test_size": %s}' % raw
++    r = auth_client.post(URL, data=body, content_type="application/json")
++    assert r.status_code == 400
+diff --git a/training/tests/test_services_unit.py b/training/tests/test_services_unit.py
+new file mode 100644
+index 0000000..a4011a4
+--- /dev/null
++++ b/training/tests/test_services_unit.py
+@@ -0,0 +1,168 @@
++"""US-11: unit tests of the core services in isolation (no HTTP).
++
++Each class targets one service and checks its rules directly, so a failure
++points at the service rather than at the API in front of it.
++"""
++import pytest
++
++from training import artifacts, jobs, locator, schemas
++from training.http import BadJson, parse_json_object
++from training.models import TrainingRun
++
++pytestmark = pytest.mark.req("MLE-F-007", "MLE-F-008", "MLE-F-009")
++
++
++class TestTrainRequestSchema:
++    base = {"dataset_id": 1, "target": "y", "model": "knn"}
++
++    def test_defaults(self):
++        req, errors = schemas.parse_train_request(dict(self.base))
++        assert errors == []
++        assert (req.test_size, req.seed) == (0.2, 42)
++        assert req.params == {"n_neighbors": 5, "weights": "uniform"}
++
++    def test_all_errors_reported_together(self):
++        _, errors = schemas.parse_train_request({"dataset_id": 0, "target": "", "model": "x", "seed": -1})
++        assert {e["field"] for e in errors} == {"dataset_id", "target", "model", "seed"}
++
++    @pytest.mark.parametrize("v", [0.1, 0.15, 0.5, 0.25, 0.3])
++    def test_good_test_sizes(self, v):
++        assert schemas._valid_test_size(v)
++
++    @pytest.mark.parametrize("v", [0.05, 0.12, 0.55, 1, 0, True, "0.2", None, float("nan"), float("inf"), -float("inf")])
++    def test_bad_test_sizes(self, v):
++        assert not schemas._valid_test_size(v)
++
++    def test_seed_boundaries(self):
++        assert schemas.parse_train_request({**self.base, "seed": 0})[1] == []
++        assert schemas.parse_train_request({**self.base, "seed": schemas.MAX_SEED})[1] == []
++        assert schemas.parse_train_request({**self.base, "seed": schemas.MAX_SEED + 1})[1] != []
++
++
++class TestLocator:
++    def test_finds_own_file(self, settings, user, dataset):
++        assert locator.locate(user.pk, dataset).name == "1.csv"
++
++    def test_other_user_cannot_locate(self, other_user, dataset):
++        with pytest.raises(locator.DatasetNotFound):
++            locator.locate(other_user.pk, dataset)
++
++    def test_missing_dataset(self, user):
++        with pytest.raises(locator.DatasetNotFound):
++            locator.locate(user.pk, 12345)
++
++    def test_custom_locator_setting(self, settings, user, tmp_path):
++        settings.WBMME_DATASET_LOCATOR = "training.tests.test_services_unit.fake_locator"
++        assert locator.locate(user.pk, 3) == tmp_path / "fake.csv"
++
++
++def fake_locator(user_id, dataset_id):
++    from django.conf import settings
++
++    return settings.WBMME_DATA_ROOT.parent / "fake.csv"
++
++
++class TestArtifacts:
++    def test_paths_are_per_user(self, user, other_user):
++        a, b = artifacts.artifact_path(user.pk, 1), artifacts.artifact_path(other_user.pk, 1)
++        assert a != b and a.parent != b.parent
++
++    def test_path_is_built_from_integers_only(self, user):
++        p = artifacts.artifact_path(user.pk, "7")
++        assert p.name == "run_7.joblib"
++        with pytest.raises(ValueError):
++            artifacts.artifact_path(user.pk, "../../etc/passwd")
++
++    def test_round_trip(self, user):
++        import joblib
++
++        path = artifacts.save({"k": [1, 2]}, user.pk, 4)
++        assert joblib.load(path) == {"k": [1, 2]}
++
++    def test_overwrite_replaces_old_file(self, user):
++        import joblib
++
++        artifacts.save("old", user.pk, 4)
++        artifacts.save("new", user.pk, 4)
++        assert joblib.load(artifacts.artifact_path(user.pk, 4)) == "new"
++
++
++class TestTrainingRunModel:
++    def make(self, user, **kw):
++        return TrainingRun.objects.create(owner=user, dataset_id=1, target="y", model_key="knn", **kw)
++
++    def test_defaults(self, user):
++        run = self.make(user)
++        assert run.status == "queued" and run.duration_seconds is None
++        assert "knn" in str(run) and "queued" in str(run)
++
++    def test_duration(self, user):
++        from datetime import timedelta
++        from django.utils import timezone
++
++        run = self.make(user)
++        run.started_at = timezone.now()
++        run.finished_at = run.started_at + timedelta(seconds=2.5)
++        assert run.duration_seconds == 2.5
++        assert run.as_dict()["duration_seconds"] == 2.5
++
++    def test_newest_first(self, user):
++        a, b = self.make(user), self.make(user)
++        assert list(TrainingRun.objects.all()) == [b, a]
++
++    def test_deleting_user_deletes_runs(self, user):
++        self.make(user)
++        user.delete()
++        assert TrainingRun.objects.count() == 0
++
++
++class TestJobs:
++    def test_unknown_run_is_ignored(self, db):
++        jobs.execute_run(424242)  # must not raise
++
++    def test_thread_entry_runs_the_job(self, user, dataset, monkeypatch):
++        calls = []
++        monkeypatch.setattr(jobs, "execute_run", calls.append)
++        monkeypatch.setattr(jobs, "close_old_connections", lambda: calls.append("close"))
++        jobs._thread_main(5)
++        assert calls == ["close", 5, "close"]
++
++    def test_thread_entry_closes_connections_even_on_error(self, monkeypatch):
++        calls = []
++
++        def boom(_):
++            raise RuntimeError
++
++        monkeypatch.setattr(jobs, "execute_run", boom)
++        monkeypatch.setattr(jobs, "close_old_connections", lambda: calls.append("close"))
++        with pytest.raises(RuntimeError):
++            jobs._thread_main(5)
++        assert calls == ["close", "close"]
++
++    def test_status_sequence(self, user, dataset, monkeypatch):
++        seen = []
++        real = jobs.pipeline.train
++
++        def spy(*a, **k):
++            seen.append(TrainingRun.objects.get().status)
++            return real(*a, **k)
++
++        monkeypatch.setattr(jobs.pipeline, "train", spy)
++        run = TrainingRun.objects.create(owner=user, dataset_id=dataset, target="label", model_key="decision_tree", params={})
++        jobs.execute_run(run.pk)
++        run.refresh_from_db()
++        assert seen == ["running"] and run.status == "completed"
++
++
++class TestJsonBody:
++    class Req:
++        def __init__(self, body, ctype="application/json"):
++            self.body, self.content_type = body, ctype
++
++    def test_object_ok(self):
++        assert parse_json_object(self.Req(b'{"a": 1}')) == {"a": 1}
++
++    @pytest.mark.parametrize("raw", [b"[1]", b"3", b"null", b"{bad", b"\xff\xfe"])
++    def test_rejects_non_objects(self, raw):
++        with pytest.raises(BadJson):
++            parse_json_object(self.Req(raw))
+-- 
+2.43.0
+
