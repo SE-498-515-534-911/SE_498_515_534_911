@@ -1,12 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Log in - WBMME{% endblock %}
-{% block content %}
-<h1>Log in</h1>
-<form method="post" novalidate>
-  {% csrf_token %}
-  {{ form.as_p }}
-  <input type="hidden" name="next" value="{{ next }}">
-  <button type="submit">Log in</button>
-</form>
-<p>No account yet? <a href="{% url 'accounts:register' %}">Register</a></p>
+{% block title %}Sign in · WBMME{% endblock %}
+{% block auth_content %}
+<section class="auth-card"><a class="brand auth-brand" href="{% url 'accounts:login' %}"><span class="brand-mark">W</span><span>WBMME<small>ML WORKSPACE</small></span></a><div class="eyebrow">WELCOME BACK</div><h1>Good to see you.</h1><p class="muted">Sign in to continue to your machine learning workspace.</p><form method="post" class="form-stack" novalidate>{% csrf_token %}{% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}{% for field in form %}<label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}{{ field }}{% if field.errors %}<span class="field-error">{{ field.errors|striptags }}</span>{% endif %}</label>{% endfor %}<input type="hidden" name="next" value="{{ next }}"><button class="button button-primary full-width" type="submit">Sign in <span>→</span></button></form><p class="auth-switch">New to WBMME? <a href="{% url 'accounts:register' %}">Create an account</a></p><div class="auth-footnote"><span class="secure-icon">✓</span> Protected with secure session authentication</div></section>
 {% endblock %}
