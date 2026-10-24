@@ -1,11 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Register - WBMME{% endblock %}
-{% block content %}
-<h1>Create an account</h1>
-<form method="post" novalidate>
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Register</button>
-</form>
-<p>Already registered? <a href="{% url 'accounts:login' %}">Log in</a></p>
+{% block title %}Create account · WBMME{% endblock %}
+{% block auth_content %}
+<section class="auth-card"><a class="brand auth-brand" href="{% url 'accounts:login' %}"><span class="brand-mark">W</span><span>WBMME<small>ML WORKSPACE</small></span></a><div class="eyebrow">GET STARTED</div><h1>Create your workspace.</h1><p class="muted">Set up your account to start preparing datasets.</p><form method="post" class="form-stack" novalidate>{% csrf_token %}{% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}{% for field in form %}<label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}{{ field }}{% if field.help_text %}<small class="field-help">{{ field.help_text|safe }}</small>{% endif %}{% if field.errors %}<span class="field-error">{{ field.errors|striptags }}</span>{% endif %}</label>{% endfor %}<button class="button button-primary full-width" type="submit">Create account <span>→</span></button></form><p class="auth-switch">Already have an account? <a href="{% url 'accounts:login' %}">Sign in</a></p></section>
 {% endblock %}

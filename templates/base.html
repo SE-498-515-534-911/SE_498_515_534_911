@@ -1,27 +1,41 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}WBMME{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'wbmme/app.css' %}">
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <nav>
-    <strong>WBMME</strong>
-    {% if user.is_authenticated %}
-      <span>{{ user.username }}</span>
-      <form method="post" action="{% url 'accounts:logout' %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit">Log out</button>
-      </form>
-    {% else %}
-      <a href="{% url 'accounts:login' %}">Log in</a>
-      <a href="{% url 'accounts:register' %}">Register</a>
-    {% endif %}
-  </nav>
-  {% if messages %}
-    <ul>{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>
+  {% if user.is_authenticated %}
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark"><span>W</span></span><span>WBMME<small>INTELLIGENCE STUDIO</small></span></a>
+      <div class="nav-label">YOUR WORKSPACE</div>
+      <nav class="side-nav">
+        <a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"><span class="nav-icon">⌂</span> Overview</a>
+        <a href="{% url 'dataset_workspace' %}" class="nav-link {% if request.resolver_match.url_name == 'dataset_workspace' %}active{% endif %}"><span class="nav-icon">▤</span> Datasets</a>
+        <a class="nav-link disabled-link" href="#models" title="Model configuration is planned for Sprint 2"><span class="nav-icon">◇</span> Models <span class="soon">SOON</span></a>
+        <a class="nav-link disabled-link" href="#training" title="Training workflow is planned for Sprint 2"><span class="nav-icon">▷</span> Training <span class="soon">SOON</span></a>
+        <a class="nav-link disabled-link" href="#evaluation" title="Evaluation UI is planned for Sprint 2"><span class="nav-icon">▥</span> Evaluation <span class="soon">SOON</span></a>
+      </nav>
+      <div class="sidebar-bottom"><div class="help-card"><span class="help-dot"></span><div><strong>All systems ready</strong><small>Secure session active</small></div></div><div class="sidebar-note">Prepare data with clarity.<br><b>Build with confidence.</b></div></div>
+    </aside>
+    <div class="main-column">
+      <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> {% block breadcrumb %}Overview{% endblock %}</div><div class="user-menu"><div class="avatar">{{ user.username|first|upper }}</div><div class="user-meta"><strong>{{ user.username }}</strong><small>{{ user.get_role_display|default:user.role }}</small></div><form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="logout-button" type="submit">Log out ↗</button></form></div></header>
+      <main class="page-content">
+        {% if messages %}<div class="messages">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+        {% block content %}{% endblock %}
+      </main>
+      <footer class="footer">WBMME <span>·</span> Web-Based Machine Learning Environment</footer>
+    </div>
+  </div>
+  {% else %}
+    <main class="auth-layout">{% if messages %}<div class="messages">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% block auth_content %}{% endblock %}</main>
   {% endif %}
-  <main>{% block content %}{% endblock %}</main>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

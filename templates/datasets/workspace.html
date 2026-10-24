@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block title %}Datasets · WBMME{% endblock %}
+{% block breadcrumb %}Datasets{% endblock %}
+
+{% block content %}
+<section class="welcome-row">
+  <div>
+    <div class="eyebrow">DATA WORKSPACE</div>
+    <h1>Your datasets</h1>
+    <p class="muted">Upload a CSV, review its structure, and prepare it for modelling.</p>
+  </div>
+  <div class="count-badge">
+    <strong>{{ dataset_count }}</strong>
+    <span>saved datasets</span>
+  </div>
+</section>
+
+<section class="workflow-banner">
+  <div class="workflow-mark"><span>01</span><i></i><span>02</span><i></i><span>03</span></div>
+  <div class="workflow-copy"><strong>From raw data to model-ready data</strong><p>Upload a CSV, inspect its quality, then choose a preprocessing strategy.</p></div>
+  <span class="workflow-status"><span></span> Workspace ready</span>
+</section>
+
+<div class="workspace-layout">
+  <section class="panel upload-panel">
+    <div class="section-title">
+      <span class="step-number">01</span>
+      <div>
+        <h2>Upload a dataset</h2>
+        <p class="muted">CSV files only · Up to the configured upload limit</p>
+      </div>
+    </div>
+
+    <form id="upload-form" class="upload-form">
+      <label class="drop-zone" for="dataset-file">
+        <span class="upload-graphic">↑</span>
+        <strong>Choose a CSV file</strong>
+        <span class="muted">Select a file from your computer</span>
+        <span id="selected-file" class="selected-file">No file selected</span>
+        <input id="dataset-file" type="file" name="file" accept=".csv,text/csv" required>
+      </label>
+      <button class="button button-primary full-width" type="submit">
+        Upload dataset <span>→</span>
+      </button>
+      <p id="upload-status" class="inline-status" role="status"></p>
+    </form>
+
+    <div class="divider-line"></div>
+
+    <div class="section-title">
+      <span class="step-number step-peach">02</span>
+      <div>
+        <h2>Preprocess data</h2>
+        <p class="muted">Handle missing values and encode categories.</p>
+      </div>
+    </div>
+
+    <form id="preprocess-form" class="form-stack">
+      <label class="field-label" for="dataset-select">
+        Dataset to preprocess
+        <select id="dataset-select" name="dataset_id" required>
+          <option value="">Choose a saved dataset</option>
+          {% for dataset in datasets %}
+          <option value="{{ dataset.id }}">{{ dataset.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="field-label" for="strategy">
+        Preprocessing strategy
+        <select id="strategy" name="strategy">
+          <option value="mean">Mean imputation</option>
+          <option value="median">Median imputation</option>
+          <option value="most_frequent">Most frequent value</option>
+          <option value="drop_rows">Drop rows with missing values</option>
+        </select>
+      </label>
+
+      <div class="strategy-note" id="strategy-note">
+        Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.
+      </div>
+
+      <button class="button button-secondary full-width" type="submit">
+        Preprocess selected CSV <span>→</span>
+      </button>
+      <p id="preprocess-status" class="inline-status" role="status"></p>
+    </form>
+  </section>
+
+  <section class="panel saved-panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Saved datasets</h2>
+        <p class="muted">Private to your account</p>
+      </div>
+      <span class="soft-count">{{ dataset_count }} total</span>
+    </div>
+
+    {% if datasets %}
+    <label class="dataset-search-wrap" for="dataset-search"><span>⌕</span><input id="dataset-search" type="search" placeholder="Search your datasets…" autocomplete="off"></label>
+    <div class="saved-list" id="saved-list">
+      {% for dataset in datasets %}
+      <article class="saved-item" data-dataset-id="{{ dataset.id }}">
+        <span class="file-icon">▤</span>
+        <div class="saved-info">
+          <strong>{{ dataset.name }}</strong>
+          <small>{{ dataset.size_bytes|filesizeformat }} · {{ dataset.uploaded_at|date:"M j, Y · H:i" }}</small>
+          <div class="saved-meta">
+            <span>{{ dataset.rows }} rows</span>
+            <span>{{ dataset.columns }} columns</span>
+          </div>
+        </div>
+        <button
+          class="preview-button"
+          type="button"
+          data-preview="{{ dataset.profile_json|escapejs }}"
+          data-name="{{ dataset.name|escape }}"
+        >Preview</button>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact-empty">
+      <div class="empty-illustration">▤</div>
+      <h3>No datasets yet</h3>
+      <p>Upload a CSV to see it listed here.</p>
+    </div>
+    {% endif %}
+
+    <div class="preview-area" id="saved-preview" hidden>
+      <div class="panel-heading">
+        <div>
+          <h3 id="preview-title">Dataset preview</h3>
+          <p class="muted">First rows from the uploaded file</p>
+        </div>
+        <button type="button" class="icon-button" id="close-preview" aria-label="Close preview">×</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="preview-table"></table>
+      </div>
+      <div id="column-summary" class="column-summary"></div>
+    </div>
+  </section>
+</div>
+
+<section class="panel results-panel" id="results-panel" hidden>
+  <div class="panel-heading">
+    <div>
+      <h2>Processed dataset</h2>
+      <p class="muted" id="results-summary">Preprocessing results</p>
+    </div>
+    <span class="status-pill status-ready">Completed</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="results-table"></table>
+  </div>
+  <p class="results-footnote">Preview of the processed response. The original uploaded file is not overwritten.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const fileInput = document.getElementById('dataset-file');
+  const selectedFile = document.getElementById('selected-file');
+  const datasetSelect = document.getElementById('dataset-select');
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const uploadStatus = document.getElementById('upload-status');
+  const preprocessStatus = document.getElementById('preprocess-status');
+
+  const strategies = {
+    mean: 'Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
+    median: 'Fills missing numeric values with their median and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
+    most_frequent: 'Fills missing values with the most frequent value in each column. Categorical columns are one-hot encoded.',
+    drop_rows: 'Removes rows containing missing values. Categorical columns are one-hot encoded.'
+  };
+
+  const datasetSearch = document.getElementById('dataset-search');
+  datasetSearch?.addEventListener('input', () => {
+    const query = datasetSearch.value.trim().toLowerCase();
+    document.querySelectorAll('.saved-item').forEach(item => {
+      item.hidden = !item.querySelector('.saved-info strong').textContent.toLowerCase().includes(query);
+    });
+  });
+
+  fileInput.addEventListener('change', () => {
+    selectedFile.textContent = fileInput.files[0]?.name || 'No file selected';
+  });
+
+  document.getElementById('strategy').addEventListener('change', event => {
+    document.getElementById('strategy-note').textContent = strategies[event.target.value];
+  });
+
+  async function readResponse(response) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || data.error?.message || `Request failed (${response.status})`);
+    }
+    return data;
+  }
+
+  function setStatus(element, message, kind = '') {
+    element.textContent = message;
+    element.className = `inline-status ${kind}`;
+  }
+
+  document.getElementById('upload-form').addEventListener('submit', async event => {
+    event.preventDefault();
+
+    const file = fileInput.files[0];
+
+    if (!file) {
+      return setStatus(uploadStatus, 'Choose a CSV file first.', 'status-error');
+    }
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      return setStatus(uploadStatus, 'Only CSV files are supported.', 'status-error');
+    }
+
+    const body = new FormData();
+    body.append('file', file);
+
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    button.textContent = 'Uploading…';
+
+    try {
+      const data = await readResponse(await fetch('/api/upload', {
+        method: 'POST',
+        body,
+        headers: {
+          'X-CSRFToken': csrf,
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin'
+      }));
+
+      setStatus(
+        uploadStatus,
+        `Uploaded ${data.dataset.name} — ${data.dataset.rows} rows and ${data.dataset.columns} columns. Refreshing list…`,
+        'status-success'
+      );
+
+      window.setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      setStatus(uploadStatus, error.message, 'status-error');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = 'Upload dataset <span>→</span>';
+    }
+  });
+
+  document.getElementById('preprocess-form').addEventListener('submit', async event => {
+    event.preventDefault();
+
+    const datasetId = datasetSelect.value;
+
+    if (!datasetId) {
+      return setStatus(preprocessStatus, 'Choose a saved dataset first.', 'status-error');
+    }
+
+    const body = new FormData();
+    body.append('dataset_id', datasetId);
+    body.append('strategy', document.getElementById('strategy').value);
+
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    button.textContent = 'Processing…';
+
+    try {
+      const data = await readResponse(await fetch('/api/datasets/preprocess', {
+        method: 'POST',
+        body,
+        headers: {
+          'X-CSRFToken': csrf,
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin'
+      }));
+
+      renderTable(document.getElementById('results-table'), data.columns, data.data);
+
+      document.getElementById('results-summary').textContent =
+        `${data.rows} rows · ${data.columns.length} columns · Strategy: ${data.strategy.replaceAll('_', ' ')}`;
+
+      document.getElementById('results-panel').hidden = false;
+      setStatus(preprocessStatus, 'Preprocessing completed successfully.', 'status-success');
+      document.getElementById('results-panel').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } catch (error) {
+      setStatus(preprocessStatus, error.message, 'status-error');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = 'Preprocess selected CSV <span>→</span>';
+    }
+  });
+
+  function renderTable(table, columns, rows) {
+    table.replaceChildren();
+
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+
+    columns.forEach(column => {
+      const th = document.createElement('th');
+      th.textContent = column;
+      headRow.appendChild(th);
+    });
+
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+
+    rows.slice(0, 50).forEach(row => {
+      const tr = document.createElement('tr');
+
+      columns.forEach(column => {
+        const td = document.createElement('td');
+        td.textContent = row[column] ?? '';
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+
+    if (rows.length > 50) {
+      const note = document.createElement('caption');
+      note.textContent = `Showing first 50 of ${rows.length} rows`;
+      table.appendChild(note);
+    }
+  }
+
+  document.querySelectorAll('[data-preview]').forEach(button => {
+    button.addEventListener('click', () => {
+      const profile = JSON.parse(button.dataset.preview);
+      const preview = profile.preview || [];
+      const columns = profile.columns || [];
+      const headers = columns.map(column => column.name);
+
+      const rows = preview.map(row =>
+        Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))
+      );
+
+      renderTable(document.getElementById('preview-table'), headers, rows);
+
+      document.getElementById('preview-title').textContent = button.dataset.name;
+      document.getElementById('column-summary').replaceChildren();
+
+      columns.forEach(column => {
+        const chip = document.createElement('span');
+        chip.className = 'column-chip';
+        chip.textContent = `${column.name} · ${column.type} · ${column.missing_values} missing`;
+        document.getElementById('column-summary').appendChild(chip);
+      });
+
+      document.getElementById('saved-preview').hidden = false;
+      document.getElementById('saved-preview').scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    });
+  });
+
+  document.getElementById('close-preview')?.addEventListener('click', () => {
+    document.getElementById('saved-preview').hidden = true;
+  });
+})();
+</script>
+{% endblock %}
