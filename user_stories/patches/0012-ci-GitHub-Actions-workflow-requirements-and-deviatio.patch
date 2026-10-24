@@ -1,0 +1,90 @@
+From 081e188d4f97384cd68a6f86713aeb045debce7b Mon Sep 17 00:00:00 2001
+From: Varnika Sadineni <sadinenivarnika@gmail.com>
+Date: Sat, 24 Oct 2026 14:45:10 +0000
+Subject: [PATCH 12/12] ci: GitHub Actions workflow, requirements and
+ deviations note
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016AqNySb7TZhbVjmWvUchag
+---
+ .github/workflows/member2-tests.yml | 26 ++++++++++++++++++++++++++
+ docs/member2/DEVIATIONS.md          | 14 ++++++++++++++
+ member2_dev/requirements.txt        | 12 ++++++++++++
+ 3 files changed, 52 insertions(+)
+ create mode 100644 .github/workflows/member2-tests.yml
+ create mode 100644 docs/member2/DEVIATIONS.md
+ create mode 100644 member2_dev/requirements.txt
+
+diff --git a/.github/workflows/member2-tests.yml b/.github/workflows/member2-tests.yml
+new file mode 100644
+index 0000000..26410db
+--- /dev/null
++++ b/.github/workflows/member2-tests.yml
+@@ -0,0 +1,26 @@
++name: Member 2 tests
++
++# Runs the unit, integration and system tests for training, limits and the speed benchmark
++# whenever one of Member 2's folders changes, on every pull request and push to main.
++on:
++  pull_request:
++    paths: ["training/**", "member2_dev/**", "loadtest/**", ".github/workflows/member2-tests.yml"]
++  push:
++    branches: [main]
++    paths: ["training/**", "member2_dev/**", "loadtest/**"]
++
++jobs:
++  test:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.11"
++          cache: pip
++          cache-dependency-path: member2_dev/requirements.txt
++      - run: pip install -r member2_dev/requirements.txt
++      - name: Unit, integration and system tests (with coverage)
++        run: python -m pytest -c member2_dev/pytest.ini --cov=training --cov-report=term-missing --cov-fail-under=95
++      - name: Training speed target (MLE-NF-002)
++        run: python -m pytest -c member2_dev/pytest.ini -m perf
+diff --git a/docs/member2/DEVIATIONS.md b/docs/member2/DEVIATIONS.md
+new file mode 100644
+index 0000000..0009f3e
+--- /dev/null
++++ b/docs/member2/DEVIATIONS.md
+@@ -0,0 +1,14 @@
++# Deviations from the submitted SRS, SAD and Test Plan (Member 2 work)
++
++Part-2 asks that deviations are documented and explained at the final demo. Everything below is a choice made while implementing; none changes a requirement's measurable target.
++
++| # | Document says | What was built | Why |
++| --- | --- | --- | --- |
++| 1 | Datasets come from the Data Workspace (US-01) | Training reads the CSV through a small "locator" function (`WBMME_DATASET_LOCATOR`) | US-01 was not merged when training was built; the locator is the one place to change |
++| 2 | Login and roles from the Authentication stories | Role comes from `WBMME_ROLE_GETTER`; default uses Django staff flag and a "Data Scientist" group; a dev-only login stands in for testing | Same reason; `member2_dev/` is not part of the product |
++| 3 | SRS MLE-SR-006 gives job limits for Student and Data Scientist | Admin gets the same limit as Data Scientist (2); rate limit 60 requests per minute per user | Table has no Admin row and no rate figure; both are settings |
++| 4 | SAD: a background job | A job runs in a **separate process** started by a server thread | Needed to meet MLE-NF-006 (a failed job must not affect the server) |
++| 5 | Table 4.3-1 lists parameters and ranges | Same ranges; the random forest also fixes `n_jobs = 1` | Keeps one job from using every CPU core |
++| 6 | MLE-NF-002: 60 s on 50,000 x 20 | Features are prepared as dense arrays (sparse only for very wide tables) | The first benchmark run took 67.6 s with sparse features (limit 60 s); now 12.9 s |
++| 7 | SRS Table 4.2-1 target rules | Enforced as written (2 to 20 classes, 2 rows per class); also rejects a test share too small to stratify | scikit-learn cannot split such data |
++| 8 | Part-1 Test Plan lists test types | Added integration and system tests, a speed benchmark and a Locust load test | Covers Test Plan sections 5 and 13 and MLE-NF-002/003 |
+diff --git a/member2_dev/requirements.txt b/member2_dev/requirements.txt
+new file mode 100644
+index 0000000..c893cc6
+--- /dev/null
++++ b/member2_dev/requirements.txt
+@@ -0,0 +1,12 @@
++# Python 3.11 (SAD) or newer
++Django>=5.2,<5.3
++numpy>=1.26
++pandas>=2.2
++scikit-learn>=1.5
++scipy>=1.11
++joblib>=1.4
++pytest>=8
++pytest-django>=4.8
++pytest-cov>=5
++# load test only (US-30)
++locust>=2.29
+-- 
+2.43.0
+

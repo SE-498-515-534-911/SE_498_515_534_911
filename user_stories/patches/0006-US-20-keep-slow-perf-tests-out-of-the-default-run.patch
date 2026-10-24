@@ -1,0 +1,27 @@
+From a87a00e0706b1ca613f4737cf59ca6b87fe1aeff Mon Sep 17 00:00:00 2001
+From: Varnika Sadineni <sadinenivarnika@gmail.com>
+Date: Sat, 24 Oct 2026 14:18:38 +0000
+Subject: [PATCH 06/12] US-20: keep slow perf tests out of the default run
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016AqNySb7TZhbVjmWvUchag
+---
+ member2_dev/pytest.ini | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/member2_dev/pytest.ini b/member2_dev/pytest.ini
+index e20f7ef..6bdd334 100644
+--- a/member2_dev/pytest.ini
++++ b/member2_dev/pytest.ini
+@@ -4,7 +4,7 @@ DJANGO_SETTINGS_MODULE = member2_dev.settings
+ pythonpath = ..
+ testpaths = ../training
+ python_files = test_*.py
+-addopts = -ra -q
++addopts = -ra -q -m "not perf"
+ markers =
+     perf: performance tests (run with -m perf; excluded by default)
+     req(ids): requirement IDs the test verifies (traceability, Test Plan section 13)
+-- 
+2.43.0
+
