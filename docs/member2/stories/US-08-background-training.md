@@ -59,22 +59,6 @@ GET /api/train/12
 ```
 A failed run has `"error": {"code": "TRAINING_FAILED", "message": "..."}`.
 
-## For teammates
-
-- **Evaluation (US-10, Tejas):** a run in status `TRAINED` is ready. Load the model with `training.artifacts.load_artifact(run.owner, run.artifact)` and rebuild the exact test split with `training.pipeline.load_split(run.dataset.file_path, run.target_column, run.preprocessing_json['missing'], run.split_json['test_size'], run.split_json['random_state'])`. Then set the run to `COMPLETED` (Figure 6, steps 7–10).
-- **Run history (US-24, Vikas):** `experiments.Run` is the run table of SAD 4.1.4; filter by `owner`. Add `Metric` and the `/api/runs` endpoints there.
-- **Front end:** send `X-CSRFToken` on POSTs and poll `GET /api/train/<run_id>` until the status is `TRAINED` or `FAILED`.
-
-## Deviations from the SAD
-
-| SAD | Here | Why |
-| --- | --- | --- |
-| Run has `artifact_path` | Run has `artifact`, a link to `training.ModelArtifact` | The signed artifact store (US-09) already records path and signature; a link keeps one source of truth (DD3). |
-| Run columns in Figure 3 | Adds `target_column`, `split_json`, `created_at` | Needed to rebuild the test split (DD2: one record reproduces one run) and to list runs newest first. |
-| Polling uses `GET /api/evaluate/{id}` | Adds `GET /api/train/{id}` (status only) | `/api/evaluate` arrives with US-10; this lets the status be shown now. `/api/evaluate` can replace it later. |
-| File store `data/{user_id}/models/{run_id}.joblib` | `MODEL_ARTIFACT_ROOT/user_{id}/{uuid}.joblib` | Layout of the existing artifact store (US-09). |
-| Rate and job limits (MLE-SR-006, 429) | Not yet | US-39 (Sprint 2). |
-| Interrupted runs marked FAILED at start-up | Not yet | US-21 (Sprint 2). |
 
 ## How to run
 
