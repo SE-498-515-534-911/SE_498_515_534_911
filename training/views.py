@@ -9,9 +9,12 @@ from django.http import JsonResponse
 
 from accounts.api_errors import error_response
 from accounts.permissions import DATA_ROLES, get_role
+from datasets.models import Dataset
+from experiments.models import Run
 
-from . import catalogue
+from . import catalogue, jobs, pipeline
 from .params import validate_params
+from .schemas import parse_train_request
 
 
 def _refuse(request, method):
@@ -30,6 +33,32 @@ def _refuse(request, method):
             request, 'FORBIDDEN', 'You do not have permission to do this.', 403
         )
     return None
+
+
+def _json_object(request):
+    """The request body as a dict, or None when it is not a JSON object."""
+    try:
+        body = json.loads(request.body or b'{}')
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _not_a_json_object(request):
+    return error_response(
+        request, 'VALIDATION_ERROR', 'The request body must be a JSON object.', 400
+    )
+
+
+def _validation_errors(request, errors):
+    """400 VALIDATION_ERROR listing every problem; ``errors`` is [{field, message}]."""
+    return error_response(
+        request,
+        'VALIDATION_ERROR',
+        ' '.join(e['message'] for e in errors),
+        400,
+        details={'field': errors[0]['field'], 'errors': errors},
+    )
 
 
 def list_models(request):
@@ -51,7 +80,7 @@ def validate_model_params(request, key):
     Body: ``{"params": {...}}``. Returns 200 with the complete parameter set
     (catalogue defaults filled in), or 400 VALIDATION_ERROR naming every
     parameter that is refused and its permitted range. ``POST /api/train``
-    (US-08) runs the same ``validate_params``, so this check cannot be skipped.
+    runs the same ``validate_params``, so this check cannot be skipped.
     """
     refused = _refuse(request, 'POST')
     if refused:
@@ -62,22 +91,107 @@ def validate_model_params(request, key):
         return error_response(
             request, 'NOT_FOUND', f"There is no model called '{key}' in the catalogue.", 404
         )
-    try:
-        body = json.loads(request.body or b'{}')
-    except (ValueError, UnicodeDecodeError):
-        body = None
-    if not isinstance(body, dict):
-        return error_response(
-            request, 'VALIDATION_ERROR', 'The request body must be a JSON object.', 400
-        )
+    body = _json_object(request)
+    if body is None:
+        return _not_a_json_object(request)
 
     clean, errors = validate_params(spec.key, body.get('params'))
     if errors:
-        return error_response(
-            request,
-            'VALIDATION_ERROR',
-            ' '.join(e.message for e in errors),
-            400,
-            details={'field': errors[0].as_dict()['field'], 'errors': [e.as_dict() for e in errors]},
-        )
+        return _validation_errors(request, [e.as_dict() for e in errors])
     return JsonResponse({'valid': True, 'model': spec.key, 'params': clean})
+
+
+def start_training(request):
+    """POST /api/train: queue a background training job (MLE-F-009, SAD 4.3.4).
+
+    Checks, in order: the body (400), that the dataset belongs to the caller
+    (404, the same answer for "missing" and "someone else's", MLE-SR-005),
+    and that the target column and split work on this dataset (400 / 422).
+    Then it records a Run in status QUEUED, starts the job and returns 202
+    at once. The client polls ``GET /api/train/<run_id>`` for the status.
+    """
+    refused = _refuse(request, 'POST')
+    if refused:
+        return refused
+    body = _json_object(request)
+    if body is None:
+        return _not_a_json_object(request)
+    parsed, errors = parse_train_request(body)
+    if errors:
+        return _validation_errors(request, errors)
+
+    dataset = Dataset.objects.filter(pk=parsed.dataset_id, owner=request.user).first()
+    if dataset is None:
+        return error_response(request, 'NOT_FOUND', 'We could not find that dataset.', 404)
+
+    try:
+        pipeline.load_split(
+            dataset.file_path,
+            parsed.target_column,
+            parsed.preprocessing['missing'],
+            parsed.split['test_size'],
+            parsed.split['random_state'],
+        )
+    except pipeline.DataError as exc:
+        status = 422 if exc.code == 'UNPROCESSABLE' else 400
+        field = 'target_column' if status == 400 else None
+        return error_response(
+            request, exc.code, exc.message, status, details={'field': field} if field else None
+        )
+
+    run = Run.objects.create(
+        owner=request.user,
+        dataset=dataset,
+        target_column=parsed.target_column,
+        model_name=parsed.model,
+        params_json=parsed.params,
+        preprocessing_json=parsed.preprocessing,
+        split_json=parsed.split,
+    )
+    jobs.submit(run.pk)
+    return JsonResponse(
+        {
+            'run_id': run.pk,
+            'status': run.status,
+            'links': {
+                'status': f'/api/train/{run.pk}',
+                'run': f'/api/runs/{run.pk}',
+                'evaluate': f'/api/evaluate/{run.pk}',
+            },
+        },
+        status=202,
+    )
+
+
+def _iso(moment):
+    return moment.isoformat().replace('+00:00', 'Z') if moment else None
+
+
+def training_status(request, run_id):
+    """GET /api/train/<run_id>: status and configuration of one of the caller's runs.
+
+    Another user's run answers 404, exactly like a run that does not exist.
+    """
+    refused = _refuse(request, 'GET')
+    if refused:
+        return refused
+    run = Run.objects.filter(pk=run_id, owner=request.user).first()
+    if run is None:
+        return error_response(request, 'NOT_FOUND', 'We could not find that run.', 404)
+    error = None
+    if run.status == Run.Status.FAILED:
+        error = {'code': 'TRAINING_FAILED', 'message': run.error_message}
+    return JsonResponse({
+        'run_id': run.pk,
+        'status': run.status,
+        'dataset_id': run.dataset_id,
+        'target_column': run.target_column,
+        'model': run.model_name,
+        'params': run.params_json,
+        'preprocessing': run.preprocessing_json,
+        'split': run.split_json,
+        'created_at': _iso(run.created_at),
+        'started_at': _iso(run.started_at),
+        'finished_at': _iso(run.finished_at),
+        'error': error,
+    })

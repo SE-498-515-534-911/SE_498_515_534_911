@@ -10,4 +10,6 @@ urlpatterns = [
         views.validate_model_params,
         name='api-validate-params',
     ),
+    path('train', views.start_training, name='api-train'),
+    path('train/<int:run_id>', views.training_status, name='api-train-status'),
 ]
