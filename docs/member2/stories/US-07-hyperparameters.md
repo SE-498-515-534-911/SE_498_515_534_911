@@ -61,10 +61,6 @@ POST /api/models/logistic_regression/params/validate
 | Not logged in / Admin | 401 / 403 | `AUTH_REQUIRED` / `FORBIDDEN` |
 | Not POST | 405 | `METHOD_NOT_ALLOWED` |
 
-## Deviation from the SAD
-
-SAD 4.3.2 lists no separate validation endpoint; parameters are checked inside `POST /api/train`. This story adds `POST /api/models/<key>/params/validate` so the Select Model form can check values before the user presses Train, and so MLE-F-008 can be tested before US-08 exists. `POST /api/train` (US-08) calls the same `validate_params`, so the rule is defined once and cannot be bypassed.
-
 ## How to run
 
 ```bash
