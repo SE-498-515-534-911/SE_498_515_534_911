@@ -6,9 +6,10 @@ progress is not treated as an error. Once the model is trained, the first call
 evaluates it (see ``run_evaluation``) and the run becomes COMPLETED.
 """
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, render
 
 from accounts.api_errors import error_response
-from accounts.permissions import DATA_ROLES, get_role
+from accounts.permissions import DATA_ROLES, data_user_required, get_role
 from experiments.models import Run
 
 from .run_evaluation import evaluate_and_complete
@@ -61,3 +62,14 @@ def evaluate(request, run_id):
         'finished_at': _iso(run.finished_at),
         'error': error,
     })
+
+
+@data_user_required
+def results_page(request, run_id):
+    """The Results screen (SAD 4.5.3): metric tiles, bar chart and confusion matrix.
+
+    The page only needs the run id; its script polls ``/api/evaluate/<run_id>``
+    and draws what comes back. The run must belong to the user, otherwise 404.
+    """
+    run = get_object_or_404(Run, pk=run_id, owner=request.user)
+    return render(request, 'evaluation/results.html', {'run': run})

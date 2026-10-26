@@ -11,5 +11,6 @@ urlpatterns = [
     path('api/auth/', include('accounts.api_urls')),
     path('api/', include('training.urls')),
     path('api/evaluate/', include('evaluation.urls')),
+    path('', include('evaluation.page_urls')),
     path('', include('datasets.urls')),
 ]
