@@ -44,6 +44,21 @@
         <caption>Number of test rows for each actual and predicted class</caption>
       </table></div>
     </section>
+
+    <section class="panel results-panel" aria-labelledby="importance-title">
+      <h2 id="importance-title">Feature importance <small>(each feature's share of the total)</small></h2>
+      <p id="importance-message" class="muted" hidden></p>
+      <div id="importance-content" hidden>
+        <div id="importance-box" class="chart-box"><canvas id="importance-chart" role="img"
+             aria-label="Bar chart of the most important features, largest first"></canvas></div>
+        <table id="importance-table" class="results-table">
+          <caption>The same numbers as the chart, largest first</caption>
+          <thead><tr><th scope="col">Feature</th><th scope="col">Importance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="importance-more" class="muted" hidden></p>
+      </div>
+    </section>
   </div>
 </section>
 {% endblock %}
