@@ -58,6 +58,11 @@ def evaluate(request, run_id):
         'averaging': evaluation.averaging if evaluation else None,
         'confusion_matrix': evaluation.confusion_matrix if evaluation else None,
         'notes': evaluation.notes if evaluation else [],
+        # US-23: a ranked list, or null with a message when the model has none.
+        'feature_importance': evaluation.feature_importance if evaluation else None,
+        'feature_importance_message': (
+            evaluation.feature_importance_message if evaluation else ''
+        ),
         'started_at': _iso(run.started_at),
         'finished_at': _iso(run.finished_at),
         'error': error,
