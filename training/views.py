@@ -180,7 +180,7 @@ def training_status(request, run_id):
         return error_response(request, 'NOT_FOUND', 'We could not find that run.', 404)
     error = None
     if run.status == Run.Status.FAILED:
-        error = {'code': 'TRAINING_FAILED', 'message': run.error_message}
+        error = {'code': run.error_code or 'TRAINING_FAILED', 'message': run.error_message}
     return JsonResponse({
         'run_id': run.pk,
         'status': run.status,

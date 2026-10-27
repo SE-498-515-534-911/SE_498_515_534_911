@@ -52,6 +52,37 @@ def save_artifact(user, model) -> ModelArtifact:
     )
 
 
+def _file_signature(path: Path) -> str:
+    """Same HMAC as ``_signature``, computed in chunks so a large model is never held in memory."""
+    mac = hmac.new(settings.SECRET_KEY.encode(), digestmod=hashlib.sha256)
+    with path.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            mac.update(chunk)
+    return mac.hexdigest()
+
+
+def save_artifact_file(user, source: Path) -> ModelArtifact:
+    """Sign a model file written by the training worker and move it into the user's directory.
+
+    Used by the isolated training job (US-21): the worker process writes the
+    model into a private scratch folder under ``MODEL_ARTIFACT_ROOT``; the server
+    signs it and moves it with one rename, without ever deserialising it. If
+    recording fails, the moved file is removed again, so no unsigned file stays.
+    """
+    source = Path(source)
+    signature = _file_signature(source)
+    directory = user_artifact_dir(user)
+    directory.mkdir(parents=True, exist_ok=True)
+    file_name = f'{uuid.uuid4().hex}.joblib'
+    target = directory / file_name
+    source.replace(target)
+    try:
+        return ModelArtifact.objects.create(owner=user, file_name=file_name, signature=signature)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+
+
 def _resolve_path(artifact: ModelArtifact) -> Path:
     directory = user_artifact_dir(artifact.owner).resolve()
     path = (directory / artifact.file_name).resolve()
