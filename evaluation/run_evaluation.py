@@ -19,6 +19,7 @@ from training import pipeline
 from training.artifacts import load_artifact
 
 from .confusion import build_confusion_matrix
+from .importance import feature_importance
 from .services import evaluate_model
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class RunEvaluation:
     averaging: str         # "binary" for two classes, "macro" for more (MLE-F-010)
     confusion_matrix: dict  # {"labels": [...], "matrix": [[...]]} for the test split
     notes: list = field(default_factory=list)
+    # Features from most to least important, or None when the model has no
+    # importance (US-23); ``feature_importance_message`` then says why.
+    feature_importance: list = None
+    feature_importance_message: str = ''
 
 
 def _present(scores):
@@ -63,12 +68,16 @@ def evaluate_run(run):
         split.y_test, model.predict(split.X_test), model.classes_
     )
 
+    importance = feature_importance(model, run.model_name)
+
     notes = [ROC_AUC_NOTE] if test_scores['roc_auc'] is None else []
     return RunEvaluation(
         metrics={'test': _present(test_scores), 'train': _present(train_scores)},
         averaging='binary' if len(model.classes_) == 2 else 'macro',
         confusion_matrix=confusion,
         notes=notes,
+        feature_importance=importance.features if importance.available else None,
+        feature_importance_message=importance.message,
     )
 
 

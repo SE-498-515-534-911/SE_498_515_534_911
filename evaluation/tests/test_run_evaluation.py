@@ -119,3 +119,28 @@ def test_a_deleted_dataset_file_fails_the_run(trained_run):
     assert evaluate_and_complete(trained_run) is None
     trained_run.refresh_from_db()
     assert trained_run.status == Run.Status.FAILED
+
+
+# ---- US-23: feature importance ----------------------------------------------------
+
+@pytest.mark.parametrize('model_name', ['logistic_regression', 'decision_tree', 'random_forest'])
+def test_supported_models_get_a_ranked_importance_list(student, model_name):
+    evaluation = evaluate_and_complete(train_run(student, model_name=model_name))
+    ranking = evaluation.feature_importance
+    assert ranking is not None and evaluation.feature_importance_message == ''
+    shares = [row['importance'] for row in ranking]
+    assert shares == sorted(shares, reverse=True)
+    assert sum(shares) == pytest.approx(1.0, abs=1e-9)
+    # the dataset has x1, x2 and a text column 'colour' (one-hot encoded)
+    assert {row['feature'] for row in ranking} == {
+        'x1', 'x2', 'colour_blue', 'colour_green', 'colour_red'}
+
+
+def test_knn_has_no_importance_but_the_run_still_completes(student):
+    run = train_run(student, model_name='knn')
+    evaluation = evaluate_and_complete(run)
+    run.refresh_from_db()
+    assert run.status == Run.Status.COMPLETED
+    assert evaluation.feature_importance is None
+    assert evaluation.feature_importance_message == (
+        'Feature importance is not available for k-Nearest Neighbours.')

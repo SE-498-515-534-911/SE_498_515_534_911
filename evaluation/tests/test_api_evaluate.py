@@ -165,3 +165,40 @@ def test_train_then_evaluate_end_to_end(student_client, student, django_capture_
     assert data['status'] == 'COMPLETED'
     assert data['model'] == 'random_forest'
     assert sum(sum(row) for row in data['confusion_matrix']['matrix']) == 24
+
+
+# ---- US-23: feature importance through the API ------------------------------------------
+
+@pytest.mark.parametrize('model_name', ['logistic_regression', 'decision_tree', 'random_forest'])
+def test_api_lists_features_in_descending_importance(student_client, student, model_name):
+    run = train_run(student, model_name=model_name)
+    data = evaluate(student_client, run.pk).json()
+    ranking = data['feature_importance']
+    assert [set(row) for row in ranking] == [{'feature', 'importance'}] * len(ranking)
+    shares = [row['importance'] for row in ranking]
+    assert shares == sorted(shares, reverse=True)
+    assert data['feature_importance_message'] == ''
+
+
+def test_api_says_not_available_for_knn(student_client, student):
+    run = train_run(student, model_name='knn')
+    data = evaluate(student_client, run.pk).json()
+    assert data['status'] == 'COMPLETED'
+    assert data['feature_importance'] is None
+    assert data['feature_importance_message'] == (
+        'Feature importance is not available for k-Nearest Neighbours.')
+
+
+def test_no_importance_is_shown_before_the_run_is_evaluated(student_client, student):
+    run = Run.objects.create(
+        owner=student, dataset=store_dataset(student, make_frame()), target_column='label',
+        model_name='random_forest', status=Run.Status.RUNNING)
+    data = evaluate(student_client, run.pk).json()
+    assert data['feature_importance'] is None and data['feature_importance_message'] == ''
+
+
+def test_another_users_importance_is_not_exposed(client, other_user, trained_run):
+    client.force_login(other_user)
+    response = evaluate(client, trained_run.pk)
+    assert response.status_code == 404
+    assert 'feature_importance' not in response.json()

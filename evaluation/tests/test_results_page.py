@@ -61,3 +61,17 @@ def test_script_never_writes_user_supplied_class_names_as_html():
     assert 'innerHTML' not in source
     assert 'insertAdjacentHTML' not in source
     assert 'document.write' not in source
+
+
+def test_page_has_a_feature_importance_section_for_the_script_to_fill(client, student, trained_run):
+    client.force_login(student)
+    html = page(client, trained_run.pk).content.decode()
+    for element_id in ('importance-chart', 'importance-table', 'importance-message', 'importance-content'):
+        assert f'id="{element_id}"' in html
+
+
+def test_script_shows_the_not_available_message_from_the_api():
+    """Models without importance (k-NN) must show the API's message, not an empty panel."""
+    source = (Path(settings.BASE_DIR) / 'static' / 'wbmme' / 'results.js').read_text(encoding='utf-8')
+    assert 'feature_importance_message' in source
+    assert 'innerHTML' not in source

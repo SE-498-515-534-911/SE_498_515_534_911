@@ -142,11 +142,67 @@
     byId('matrix-total').textContent = String(total);
   }
 
+  // US-23 (MLE-F-012): the top features, largest first, or a clear "not available" message.
+  var TOP_FEATURES = 15;
+
+  function renderImportance(data) {
+    var ranking = data.feature_importance;
+    var message = byId('importance-message');
+    if (!ranking) {
+      message.textContent = data.feature_importance_message ||
+        'Feature importance is not available for this run.';
+      message.hidden = false;
+      return;
+    }
+
+    var shown = ranking.slice(0, TOP_FEATURES);
+    var body = byId('importance-table').querySelector('tbody');
+    body.textContent = '';
+    shown.forEach(function (item) {
+      var row = el('tr');
+      var head = el('th', item.feature);      // feature names come from the user's CSV: text only
+      head.setAttribute('scope', 'row');
+      row.appendChild(head);
+      row.appendChild(el('td', item.importance.toFixed(3)));
+      body.appendChild(row);
+    });
+    if (ranking.length > shown.length) {
+      var more = byId('importance-more');
+      more.textContent = 'Showing the ' + shown.length + ' most important of ' +
+        ranking.length + ' features.';
+      more.hidden = false;
+    }
+
+    if (typeof window.Chart !== 'undefined') {
+      byId('importance-box').style.height = (70 + 26 * shown.length) + 'px';
+      new window.Chart(byId('importance-chart'), {
+        type: 'bar',
+        data: {
+          labels: shown.map(function (item) { return item.feature; }),
+          datasets: [{
+            label: 'Importance',
+            data: shown.map(function (item) { return item.importance; }),
+            backgroundColor: '#42694a'
+          }]
+        },
+        options: {
+          indexAxis: 'y',               // horizontal bars: long feature names stay readable
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { min: 0 } }
+        }
+      });
+    }
+    byId('importance-content').hidden = false;
+  }
+
   function renderResults(data) {
     renderTiles(data.metrics.test, data.averaging);
     renderTable(data.metrics);
     renderChart(data.metrics);
     renderConfusionMatrix(data.confusion_matrix);
+    renderImportance(data);
     byId('results-notes').textContent = (data.notes || []).join(' ');
     byId('results-body').hidden = false;
   }
