@@ -63,13 +63,14 @@ def test_internal_error_is_logged_and_the_user_sees_a_generic_message(dataset, m
     def explode(*args, **kwargs):
         raise RuntimeError('secret internal detail')
 
-    monkeypatch.setattr(jobs.pipeline, 'train', explode)
+    monkeypatch.setattr('training.pipeline.train', explode)
     run = make_run(dataset)
-    with caplog.at_level(logging.ERROR, logger='training.jobs'):
+    with caplog.at_level(logging.ERROR, logger='training.runner'):
         jobs.execute_run(run.pk)
     run.refresh_from_db()
     assert run.status == Run.Status.FAILED
     assert run.error_message == jobs.GENERIC_FAILURE
+    assert run.error_code == 'TRAINING_FAILED'
     assert 'secret internal detail' not in run.error_message
     assert 'secret internal detail' in caplog.text
 

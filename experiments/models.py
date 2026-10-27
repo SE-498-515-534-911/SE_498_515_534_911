@@ -36,6 +36,11 @@ class Run(models.Model):
         max_length=12, choices=Status.choices, default=Status.QUEUED, db_index=True
     )
     error_message = models.TextField(blank=True, default='')
+    # SAD 4.4.2 code for a FAILED run: TRAINING_FAILED or TRAINING_TIMEOUT (US-21).
+    error_code = models.CharField(max_length=32, blank=True, default='')
+    # Last sign of life from the server thread that runs the job; a run that
+    # stops reporting was interrupted, e.g. by a server restart (US-21, SAD 4.4.3).
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
     # The trained model, stored and signed by training.artifacts (MLE-SR-004).
     artifact = models.OneToOneField(
         'training.ModelArtifact',

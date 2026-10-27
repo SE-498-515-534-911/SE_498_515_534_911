@@ -1,15 +1,21 @@
-"""Background training jobs (US-08, MLE-F-009; SAD DD1 and Figure 6 steps 3 to 6).
+"""Background training jobs (US-08 MLE-F-009; US-21 MLE-NF-006; SAD DD1, 4.4.3).
 
 ``POST /api/train`` creates a Run in status QUEUED and returns at once. A
-worker thread moves it to RUNNING, fits the model, saves it through the signed
-artifact store and sets TRAINED, so the user interface stays usable while a job
-runs. Evaluation (US-10) then moves the run to COMPLETED. Any error moves it to
-FAILED with a message that is safe to show the user.
+server thread then moves it to RUNNING and hands the work to ``runner``, which
+trains in a separate process with a time limit. The thread only waits, sends a
+heartbeat, and records the outcome: TRAINED with a signed model, or FAILED with
+a plain message and a SAD 4.4.2 error code. Evaluation (US-10/22) then moves a
+TRAINED run to COMPLETED.
 
-Hardening for crashes and time-outs (US-21, US-39) builds on this module.
+A failed run never leaves a model behind: the worker writes into a private
+scratch folder that is always deleted, and only a successful model is signed
+and moved into the user's directory.
 """
 import logging
+import shutil
 import threading
+import uuid
+from pathlib import Path
 
 from django.conf import settings
 from django.db import close_old_connections, transaction
@@ -17,15 +23,13 @@ from django.utils import timezone
 
 from experiments.models import Run
 
-from . import pipeline
-from .artifacts import save_artifact
+from . import runner
+from .artifacts import save_artifact_file
 
 logger = logging.getLogger(__name__)
 
-GENERIC_FAILURE = (
-    'Training failed because of an internal error. Please try again, '
-    'and tell your administrator if it keeps happening.'
-)
+GENERIC_FAILURE = runner.INTERNAL_MESSAGE
+SCRATCH_DIR_NAME = '_work'
 
 
 def submit(run_id):
@@ -53,11 +57,27 @@ def _thread_main(run_id):
         close_old_connections()
 
 
-def _finish(run, status, error=''):
-    run.status = status
-    run.error_message = error
-    run.finished_at = timezone.now()
-    run.save(update_fields=['status', 'error_message', 'finished_at', 'artifact'])
+def scratch_root():
+    """Private folder for unfinished jobs, outside the web root (inside MODEL_ARTIFACT_ROOT)."""
+    return Path(settings.MODEL_ARTIFACT_ROOT) / SCRATCH_DIR_NAME
+
+
+def _heartbeat(run_id):
+    Run.objects.filter(pk=run_id, status=Run.Status.RUNNING).update(heartbeat_at=timezone.now())
+
+
+def _finish(run, status, message='', code=''):
+    """Record the outcome, but only if the run is still RUNNING (recovery may have failed it)."""
+    now = timezone.now()
+    updated = Run.objects.filter(pk=run.pk, status=Run.Status.RUNNING).update(
+        status=status,
+        error_message=message,
+        error_code=code,
+        artifact=run.artifact,
+        finished_at=now,
+        heartbeat_at=now,
+    )
+    return updated == 1
 
 
 def execute_run(run_id):
@@ -67,25 +87,44 @@ def execute_run(run_id):
     ).first()
     if run is None:
         return
+    now = timezone.now()
     run.status = Run.Status.RUNNING
-    run.started_at = timezone.now()
-    run.save(update_fields=['status', 'started_at'])
+    run.started_at = run.heartbeat_at = now
+    run.save(update_fields=['status', 'started_at', 'heartbeat_at'])
+
+    out_dir = scratch_root() / f'run_{run.pk}_{uuid.uuid4().hex[:8]}'
     try:
-        fitted, _ = pipeline.train(
-            run.dataset.file_path,
-            run.target_column,
-            run.model_name,
-            run.params_json,
-            run.preprocessing_json.get('missing', 'median'),
-            run.split_json['test_size'],
-            run.split_json['random_state'],
-        )
-        run.artifact = save_artifact(run.owner, fitted)
-    except pipeline.DataError as exc:
-        _finish(run, Run.Status.FAILED, exc.message)
+        out_dir.mkdir(parents=True)
+        spec = {
+            'run_id': run.pk,
+            'file_path': run.dataset.file_path,
+            'target_column': run.target_column,
+            'model_name': run.model_name,
+            'params': run.params_json,
+            'missing': run.preprocessing_json.get('missing', 'median'),
+            'test_size': run.split_json['test_size'],
+            'random_state': run.split_json['random_state'],
+            'out_dir': str(out_dir),
+        }
+        model_file = runner.run(spec, out_dir, on_tick=lambda: _heartbeat(run.pk))
+        run.artifact = save_artifact_file(run.owner, model_file)
+    except runner.JobFailed as exc:
+        _finish(run, Run.Status.FAILED, exc.message, exc.code)
     except Exception:  # noqa: BLE001 - the cause goes to the server log, not to the user
         logger.exception('Training run %s failed', run_id)
-        _finish(run, Run.Status.FAILED, GENERIC_FAILURE)
+        _finish(run, Run.Status.FAILED, GENERIC_FAILURE, runner.TRAINING_FAILED)
     else:
-        _finish(run, Run.Status.TRAINED)
-        logger.info('Training run %s trained (%s)', run_id, run.model_name)
+        if _finish(run, Run.Status.TRAINED):
+            logger.info('Training run %s trained (%s)', run_id, run.model_name)
+        else:
+            # The run was marked FAILED meanwhile (interrupted); do not keep its model.
+            _discard_artifact(run.artifact)
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+
+
+def _discard_artifact(artifact):
+    from .artifacts import user_artifact_dir
+
+    (user_artifact_dir(artifact.owner) / artifact.file_name).unlink(missing_ok=True)
+    artifact.delete()
