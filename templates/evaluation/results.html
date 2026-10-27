@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Run {{ run.pk }} results · WBMME{% endblock %}
+{% block breadcrumb %}Run {{ run.pk }} results{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'wbmme/results.css' %}">{% endblock %}
+{% block content %}
+<section id="results" class="results"
+         data-api-url="{% url 'api-evaluate' run.pk %}" data-poll-ms="2000">
+  <div class="results-head">
+    <div>
+      <div class="eyebrow">RESULTS</div>
+      <h1>Run {{ run.pk }} <small>{{ run.model_name }}</small></h1>
+      <p class="muted">Metrics are measured on the test split, which the model never saw while training.</p>
+    </div>
+    <span id="run-status" class="results-status" role="status" aria-live="polite">Loading…</span>
+  </div>
+
+  <div id="results-error" class="results-error" role="alert" hidden></div>
+
+  <div id="results-body" hidden>
+    <section class="panel results-panel" aria-labelledby="tiles-title">
+      <h2 id="tiles-title">Test metrics <small id="averaging-note"></small></h2>
+      <div id="metric-tiles" class="metric-tiles"></div>
+      <p id="results-notes" class="muted"></p>
+    </section>
+
+    <section class="panel results-panel" aria-labelledby="chart-title">
+      <h2 id="chart-title">Metrics chart</h2>
+      <div class="chart-box"><canvas id="metric-chart" role="img"
+           aria-label="Bar chart of accuracy, precision, recall, F1 and ROC-AUC for the test and train splits"></canvas></div>
+      <p id="chart-missing" class="muted" hidden>The chart could not be loaded. The table below has the same numbers.</p>
+      <table id="metric-table" class="results-table">
+        <caption>The same numbers as the chart</caption>
+        <thead><tr><th scope="col">Metric</th><th scope="col">Test</th><th scope="col">Train</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel results-panel" aria-labelledby="matrix-title">
+      <h2 id="matrix-title">Confusion matrix</h2>
+      <p class="muted">Rows are the actual class and columns the predicted class.
+        All cells add up to <strong id="matrix-total">0</strong> test rows.</p>
+      <div class="matrix-wrap"><table id="confusion-matrix" class="results-table matrix">
+        <caption>Number of test rows for each actual and predicted class</caption>
+      </table></div>
+    </section>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'wbmme/vendor/chart.umd.min.js' %}"></script>
+<script src="{% static 'wbmme/results.js' %}"></script>
+{% endblock %}

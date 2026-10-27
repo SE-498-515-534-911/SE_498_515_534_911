@@ -54,3 +54,26 @@ class Run(models.Model):
 
     def __str__(self):
         return f'Run {self.pk} ({self.model_name}, {self.status})'
+
+
+class Metric(models.Model):
+    """One number measured for a run (SAD 4.1.4, Figure 3; MLE-F-010, MLE-F-013).
+
+    The name carries the split it was computed on, for example
+    ``test_accuracy`` or ``train_f1``, so both splits fit in one table.
+    A metric that is not defined for the data (such as ROC-AUC without
+    probabilities) is simply not stored.
+    """
+
+    run = models.ForeignKey(Run, on_delete=models.CASCADE, related_name='metrics')
+    name = models.CharField(max_length=40)
+    value = models.FloatField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['run', 'name'], name='one_value_per_metric_name')
+        ]
+        ordering = ['name']
+
+    def __str__(self):
+        return f'{self.name}={self.value:.4f} (run {self.run_id})'
