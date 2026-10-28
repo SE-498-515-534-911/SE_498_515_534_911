@@ -10,3 +10,13 @@ def training_jobs_in_process(settings):
     isolation back on to use real child processes (US-21).
     """
     settings.TRAINING_JOB_ISOLATION = False
+
+
+@pytest.fixture(autouse=True)
+def fresh_request_counters():
+    """Each test starts with empty rate-limit counters (US-39)."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()

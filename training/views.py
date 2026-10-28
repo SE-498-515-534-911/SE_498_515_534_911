@@ -5,6 +5,7 @@ error catalogue (SAD 4.4.2) through ``accounts.api_errors.error_response``.
 """
 import json
 
+from django.db import transaction
 from django.http import JsonResponse
 
 from accounts.api_errors import error_response
@@ -12,7 +13,7 @@ from accounts.permissions import DATA_ROLES, get_role
 from datasets.models import Dataset
 from experiments.models import Run
 
-from . import catalogue, jobs, pipeline
+from . import catalogue, jobs, limits, pipeline
 from .params import validate_params
 from .schemas import parse_train_request
 
@@ -101,6 +102,20 @@ def validate_model_params(request, key):
     return JsonResponse({'valid': True, 'model': spec.key, 'params': clean})
 
 
+def _active_jobs(user):
+    return Run.objects.filter(owner=user, status__in=Run.ACTIVE_STATUSES).count()
+
+
+def _job_limit_reached(request, quota):
+    return error_response(
+        request,
+        'RATE_LIMITED',
+        limits.job_quota_message(request.user, quota),
+        429,
+        details={'limit': quota},
+    )
+
+
 def start_training(request):
     """POST /api/train: queue a background training job (MLE-F-009, SAD 4.3.4).
 
@@ -109,6 +124,9 @@ def start_training(request):
     and that the target column and split work on this dataset (400 / 422).
     Then it records a Run in status QUEUED, starts the job and returns 202
     at once. The client polls ``GET /api/train/<run_id>`` for the status.
+
+    A user who already has the maximum number of QUEUED or RUNNING jobs gets
+    429 RATE_LIMITED (Student 1, Data Scientist 2; MLE-SR-006(c), US-39).
     """
     refused = _refuse(request, 'POST')
     if refused:
@@ -123,6 +141,10 @@ def start_training(request):
     dataset = Dataset.objects.filter(pk=parsed.dataset_id, owner=request.user).first()
     if dataset is None:
         return error_response(request, 'NOT_FOUND', 'We could not find that dataset.', 404)
+
+    quota = limits.job_limit(request.user)
+    if _active_jobs(request.user) >= quota:
+        return _job_limit_reached(request, quota)
 
     try:
         pipeline.load_split(
@@ -139,16 +161,20 @@ def start_training(request):
             request, exc.code, exc.message, status, details={'field': field} if field else None
         )
 
-    run = Run.objects.create(
-        owner=request.user,
-        dataset=dataset,
-        target_column=parsed.target_column,
-        model_name=parsed.model,
-        params_json=parsed.params,
-        preprocessing_json=parsed.preprocessing,
-        split_json=parsed.split,
-    )
-    jobs.submit(run.pk)
+    # Check again and create in one step, so two quick requests cannot both pass.
+    with limits.job_quota_lock, transaction.atomic():
+        if _active_jobs(request.user) >= quota:
+            return _job_limit_reached(request, quota)
+        run = Run.objects.create(
+            owner=request.user,
+            dataset=dataset,
+            target_column=parsed.target_column,
+            model_name=parsed.model,
+            params_json=parsed.params,
+            preprocessing_json=parsed.preprocessing,
+            split_json=parsed.split,
+        )
+        jobs.submit(run.pk)
     return JsonResponse(
         {
             'run_id': run.pk,
