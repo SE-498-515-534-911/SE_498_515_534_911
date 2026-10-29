@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from accounts.api_errors import error_response
 from accounts.permissions import DATA_ROLES, get_role
 from datasets.models import Dataset
-from experiments.models import Run
+from experiments.models import Metric, Run
 
 from . import catalogue, jobs, limits, pipeline
 from .params import validate_params
@@ -221,3 +221,41 @@ def training_status(request, run_id):
         'finished_at': _iso(run.finished_at),
         'error': error,
     })
+
+def run_history(request):
+    """GET /api/runs: list the current user's runs, newest first."""
+    refused = _refuse(request, 'GET')
+    if refused:
+        return refused
+
+    runs = (
+        Run.objects.filter(owner=request.user)
+        .select_related('dataset')
+        .prefetch_related('metrics')
+        .order_by('-created_at', '-id')
+    )
+
+    history = []
+    for run in runs:
+        history.append({
+            'run_id': run.pk,
+            'owner': run.owner_id,
+            'dataset_id': run.dataset_id,
+            'target_column': run.target_column,
+            'split': run.split_json,
+            'model': run.model_name,
+            'params': run.params_json,
+            'status': run.status,
+            'error_message': run.error_message,
+            'preprocessing': run.preprocessing_json,
+            'metrics': {
+                metric.name: metric.value
+                for metric in run.metrics.all()
+            },
+            'created_at': _iso(run.created_at),
+            'started_at': _iso(run.started_at),
+            'finished_at': _iso(run.finished_at),
+
+        })
+
+    return JsonResponse({'runs': history})

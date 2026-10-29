@@ -12,4 +12,5 @@ urlpatterns = [
     ),
     path('train', views.start_training, name='api-train'),
     path('train/<int:run_id>', views.training_status, name='api-train-status'),
+    path('runs', views.run_history, name='api-run-history'),
 ]
