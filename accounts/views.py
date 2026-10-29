@@ -42,5 +42,8 @@ def home(request):
 
 @admin_required  # Admin only (MLE-F-002, MLE-F-016)
 def admin_dashboard(request):
-    return render(request, 'accounts/admin_dashboard.html')
+    """The Admin panel (SAD 4.5.3). Its script loads users, datasets and the
+    audit log from /api/admin/; the page only needs the list of audit events
+    for the filter box."""
+    return render(request, 'accounts/admin_dashboard.html', {'actions': Action.choices})
 
