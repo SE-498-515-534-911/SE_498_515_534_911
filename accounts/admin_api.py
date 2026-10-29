@@ -20,7 +20,7 @@ from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 
 from audit import services as audit
-from audit.models import Action
+from audit.models import Action, AuditLog
 from datasets.models import Dataset
 
 from . import admin_services
@@ -258,3 +258,52 @@ def delete_dataset(request, dataset_id):
     admin_services.remove_dataset(dataset)
     audit.record(Action.ADMIN_DATASET_DELETE, user=request.user, target=target, request=request)
     return HttpResponse(status=204)
+
+
+# ---- audit log -----------------------------------------------------------------------
+
+def _audit_json(entry):
+    """One audit entry: when, who, what, to which item and from where.
+
+    ``target`` is only a short identifier such as ``run:12``. The log holds no
+    raw data values and no credentials (SAD 4.4.4), so there are none to show.
+    """
+    user = entry.user
+    return {
+        'id': entry.pk,
+        'timestamp': iso(entry.timestamp),
+        'user': {'id': user.pk, 'username': user.username} if user else None,
+        'action': entry.action,
+        'target': entry.target,
+        'ip_address': entry.ip_address,
+    }
+
+
+def list_audit(request):
+    """GET /api/admin/audit: the audit log, newest first (MLE-F-016, MLE-SR-005).
+
+    Optional filters: ``?action=LOGIN_FAILED`` and ``?user_id=3``.
+    """
+    refused = refuse_unless_admin(request, 'GET')
+    if refused:
+        return refused
+
+    entries = AuditLog.objects.select_related('user').order_by('-timestamp', '-id')
+
+    action = request.GET.get('action')
+    if action:
+        if action not in Action.values:
+            return _bad_request(request, 'action is not a known audit event.', field='action')
+        entries = entries.filter(action=action)
+
+    user_id = request.GET.get('user_id')
+    if user_id:
+        try:
+            entries = entries.filter(user_id=int(user_id))
+        except ValueError:
+            return _bad_request(request, 'user_id must be a number.', field='user_id')
+
+    items, meta, error = paginate(request, entries)
+    if error:
+        return error
+    return JsonResponse({'entries': [_audit_json(e) for e in items], 'pagination': meta})
