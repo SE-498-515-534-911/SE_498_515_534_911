@@ -106,3 +106,23 @@ def test_compare_rejects_get(client, student):
     client.force_login(student)
     response = client.get("/api/runs/compare")
     assert response.status_code == 405
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "{invalid json",
+        "[]",
+        "null",
+        '"text"',
+    ],
+)
+def test_compare_rejects_invalid_json_bodies(client, student, body):
+    client.force_login(student)
+
+    response = client.post(
+        "/api/runs/compare",
+        data=body,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
