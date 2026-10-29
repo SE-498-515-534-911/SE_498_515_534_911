@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'training',
     'evaluation',
     'experiments',
+    'audit.apps.AuditConfig',
 ]
 
 MIDDLEWARE = [
