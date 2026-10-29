@@ -14,6 +14,9 @@ contents, column profiles or file paths.
 """
 from math import ceil
 
+from django.contrib.auth import get_user_model
+from django.http import JsonResponse
+
 from .api_errors import error_response
 from .models import Role
 from .permissions import get_role
@@ -74,3 +77,35 @@ def paginate(request, queryset):
 def iso(moment):
     """A timestamp as ISO 8601 in UTC, like ``2026-10-20T09:30:00Z`` (SAD 4.3.1)."""
     return moment.isoformat().replace('+00:00', 'Z') if moment else None
+
+
+# ---- users ---------------------------------------------------------------------
+
+def _user_json(user):
+    """One account for the Admin: who, which role and whether it can log in.
+
+    Passwords, e-mail addresses and anything else about the person stay out:
+    the Admin console needs only what is required to manage the account.
+    """
+    return {
+        'id': user.pk,
+        'username': user.username,
+        'role': user.role,               # None for an account with no profile
+        'is_active': user.is_active,
+        'date_joined': iso(user.date_joined),
+        'last_login': iso(user.last_login),
+    }
+
+
+def list_users(request):
+    """GET /api/admin/users: every account with its role and status (MLE-F-016)."""
+    refused = refuse_unless_admin(request, 'GET')
+    if refused:
+        return refused
+    # select_related loads each profile in the same query, so the list does not
+    # run one extra query per user to read its role.
+    users = get_user_model().objects.select_related('profile').order_by('username')
+    items, meta, error = paginate(request, users)
+    if error:
+        return error
+    return JsonResponse({'users': [_user_json(u) for u in items], 'pagination': meta})
