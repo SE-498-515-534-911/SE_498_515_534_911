@@ -12,13 +12,18 @@ The Admin manages accounts and dataset RECORDS. An Admin can never read what
 is inside a dataset (MLE-F-016, SAD DD5): no response here contains file
 contents, column profiles or file paths.
 """
+import json
 from math import ceil
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.http import JsonResponse
 
+from audit import services as audit
+from audit.models import Action
+
 from .api_errors import error_response
-from .models import Role
+from .models import Profile, Role
 from .permissions import get_role
 
 DEFAULT_PAGE_SIZE = 20     # SAD 4.3.1
@@ -109,3 +114,87 @@ def list_users(request):
     if error:
         return error
     return JsonResponse({'users': [_user_json(u) for u in items], 'pagination': meta})
+
+
+# ---- changing an account ---------------------------------------------------------
+
+VALID_ROLES = {role.value for role in Role}
+# The ONLY things an Admin can change through this endpoint. Anything else in the
+# request (is_superuser, password, username, ...) is refused, so a crafted request
+# cannot change fields it was never meant to touch.
+CHANGEABLE_FIELDS = {'role', 'is_active'}
+
+
+def _json_object(request):
+    """The request body as a dict, or None when it is not a JSON object."""
+    try:
+        body = json.loads(request.body or b'')
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _bad_request(request, message, field=None):
+    details = {'field': field} if field else None
+    return error_response(request, 'VALIDATION_ERROR', message, 400, details=details)
+
+
+def update_user(request, user_id):
+    """PATCH /api/admin/users/<id>: change a role, deactivate or reactivate (MLE-F-016).
+
+    Body: ``{"role": "STUDENT"}``, ``{"is_active": false}`` or both. A role change
+    takes effect on the account's very next request. A deactivated account cannot
+    log in and its open sessions stop working, because Django treats an inactive
+    user as not logged in.
+    """
+    refused = refuse_unless_admin(request, 'PATCH')
+    if refused:
+        return refused
+
+    body = _json_object(request)
+    if body is None:
+        return _bad_request(request, 'The request body must be a JSON object.')
+    unknown = set(body) - CHANGEABLE_FIELDS
+    if unknown:
+        return _bad_request(
+            request, 'Only role and is_active can be changed.', field=sorted(unknown)[0]
+        )
+    if not body:
+        return _bad_request(request, 'Give a role or is_active to change.')
+    # Check the type first: a list or object is not a valid role (and cannot be looked up in a set).
+    if 'role' in body and not (isinstance(body['role'], str) and body['role'] in VALID_ROLES):
+        return _bad_request(
+            request, 'role must be STUDENT, DATA_SCIENTIST or ADMIN.', field='role'
+        )
+    if 'is_active' in body and not isinstance(body['is_active'], bool):
+        return _bad_request(request, 'is_active must be true or false.', field='is_active')
+
+    target = get_user_model().objects.select_related('profile').filter(pk=user_id).first()
+    if target is None:
+        return error_response(request, 'NOT_FOUND', 'We could not find that account.', 404)
+    if target.pk == request.user.pk:
+        # An Admin who removes their own access could leave nobody able to manage accounts.
+        return error_response(
+            request, 'UNPROCESSABLE', 'You cannot change your own role or status.', 422
+        )
+
+    changes = []
+    with transaction.atomic():
+        if 'role' in body and body['role'] != target.role:
+            Profile.objects.update_or_create(user=target, defaults={'role': body['role']})
+            changes.append(f"role->{body['role']}")
+        if 'is_active' in body and body['is_active'] != target.is_active:
+            target.is_active = body['is_active']
+            target.save(update_fields=['is_active'])
+            changes.append('reactivated' if target.is_active else 'deactivated')
+        if changes:
+            # Audit log (US-38): who changed which account and how. No personal data.
+            audit.record(
+                Action.ADMIN_USER_UPDATE,
+                user=request.user,
+                target=f"user:{target.pk} {' '.join(changes)}",
+                request=request,
+            )
+
+    refreshed = get_user_model().objects.select_related('profile').get(pk=target.pk)
+    return JsonResponse({'user': _user_json(refreshed)})
