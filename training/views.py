@@ -220,6 +220,7 @@ def run_history(request):
             'model': run.model_name,
             'params': run.params_json,
             'status': run.status,
+            'preprocessing': run.preprocessing_json,
             'metrics': {
                 metric.name: metric.value
                 for metric in run.metrics.all()
@@ -227,6 +228,7 @@ def run_history(request):
             'created_at': _iso(run.created_at),
             'started_at': _iso(run.started_at),
             'finished_at': _iso(run.finished_at),
+
         })
 
     return JsonResponse({'runs': history})
