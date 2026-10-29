@@ -20,6 +20,12 @@ from .catalogue import build_estimator
 MISSING_STRATEGIES = ('median', 'mean', 'most_frequent', 'drop_rows')
 CATEGORICAL_STRATEGIES = ('one_hot',)
 MAX_ONE_HOT_CATEGORIES = 30
+# Tree models are much slower on sparse input: on the MLE-NF-002 benchmark
+# (50,000 rows, 20 features) a default random forest needed 61.7 s to train on
+# sparse features and about 11 s on dense ones (US-20). Features are therefore
+# dense, unless the prepared table would be very large (dense float64 cells,
+# about 200 MB), when sparse protects the server's memory.
+MAX_DENSE_CELLS = 25_000_000
 
 
 class DataError(Exception):
@@ -73,6 +79,20 @@ def load_split(file_path, target_column, missing, test_size, seed):
     return make_split(read_csv(file_path), target_column, missing, test_size, seed)
 
 
+def prepared_width(X_train):
+    """Upper bound of the number of columns after one-hot encoding."""
+    numeric = X_train.select_dtypes(include='number').columns
+    width = len(numeric)
+    for column in X_train.columns.difference(numeric):
+        # one column per category, capped by max_categories (+1 for "infrequent")
+        width += min(int(X_train[column].nunique(dropna=True)) + 1, MAX_ONE_HOT_CATEGORIES)
+    return width
+
+
+def use_dense(X_train):
+    return len(X_train) * prepared_width(X_train) <= MAX_DENSE_CELLS
+
+
 def build_pipeline(model_name, params, seed, X_train, missing='median'):
     """Preprocessing + model as one scikit-learn Pipeline, so `fit` sees the training split only."""
     from sklearn.compose import ColumnTransformer
@@ -103,7 +123,9 @@ def build_pipeline(model_name, params, seed, X_train, missing='median'):
             categorical,
         ))
     return Pipeline([
-        ('prepare', ColumnTransformer(transformers, sparse_threshold=1.0)),
+        ('prepare', ColumnTransformer(
+            transformers, sparse_threshold=0.0 if use_dense(X_train) else 1.0,
+        )),
         ('model', build_estimator(model_name, params, seed)),
     ])
 
