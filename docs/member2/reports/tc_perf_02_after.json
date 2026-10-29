@@ -1,0 +1,75 @@
+{
+  "test_case": "TC-PERF-02",
+  "requirement": "MLE-NF-002",
+  "url": "http://127.0.0.1:8768 (runserver, production settings)",
+  "dataset": {
+    "rows": 50000,
+    "feature_columns": 20,
+    "bytes": 5602308,
+    "upload_seconds": 0.68
+  },
+  "client_machine": {
+    "platform": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
+    "python": "3.13.17",
+    "cpus": 2
+  },
+  "limit_seconds": 60.0,
+  "results": [
+    {
+      "model": "logistic_regression",
+      "run_id": 1,
+      "status": "COMPLETED",
+      "seconds_to_trained": 3.34,
+      "seconds_to_completed": 3.78,
+      "test_accuracy": 0.7823,
+      "error": null,
+      "passed": true
+    },
+    {
+      "model": "knn",
+      "run_id": 2,
+      "status": "COMPLETED",
+      "seconds_to_trained": 3.18,
+      "seconds_to_completed": 15.48,
+      "test_accuracy": 0.6056,
+      "error": null,
+      "passed": true
+    },
+    {
+      "model": "decision_tree",
+      "run_id": 3,
+      "status": "COMPLETED",
+      "seconds_to_trained": 4.21,
+      "seconds_to_completed": 4.66,
+      "test_accuracy": 0.686,
+      "error": null,
+      "passed": true
+    },
+    {
+      "model": "random_forest",
+      "run_id": 4,
+      "status": "COMPLETED",
+      "seconds_to_trained": 14.32,
+      "seconds_to_completed": 18.45,
+      "test_accuracy": 0.7632,
+      "error": null,
+      "passed": true
+    }
+  ],
+  "dashboard": {
+    "loads": 42,
+    "failures": 0,
+    "average_seconds": 0.018,
+    "p95_seconds": 0.029,
+    "max_seconds": 0.114,
+    "passed": true
+  },
+  "passed": true,
+  "server_machine": {
+    "cpus": 2,
+    "memory_gb": 8,
+    "os": "Linux container",
+    "python": "3.13"
+  },
+  "code": "US-20 branch (dense features)"
+}

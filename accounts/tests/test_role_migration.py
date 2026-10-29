@@ -34,4 +34,6 @@ def test_existing_roles_are_kept_and_uppercased():
     roles = {p.user.username: p.role for p in Profile.objects.select_related('user')}
     assert roles == {'s': 'student', 'd': 'data_scientist', 'a': 'admin'}
 
-    migrate_to(AFTER)  # leave the test database fully migrated
+    # Leave the test database fully migrated, including migrations added after 0002
+    # (for example 0003_login_throttle); later tests need every table.
+    migrate_to(MigrationExecutor(connection).loader.graph.leaf_nodes())
