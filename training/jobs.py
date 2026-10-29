@@ -21,6 +21,8 @@ from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
+from audit import services as audit
+from audit.models import Action
 from experiments.models import Run
 
 from . import runner
@@ -77,6 +79,14 @@ def _finish(run, status, message='', code=''):
         finished_at=now,
         heartbeat_at=now,
     )
+    if updated == 1:
+        # Audit log (US-38): training finished, or failed, for this user's run.
+        done = status == Run.Status.TRAINED
+        audit.record(
+            Action.TRAIN_DONE if done else Action.TRAIN_FAIL,
+            user=run.owner,
+            target=f'run:{run.pk}',
+        )
     return updated == 1
 
 
