@@ -6,7 +6,11 @@ log. Registration and the lockout are logged where they happen
 (accounts/views.py, accounts/api.py and accounts/forms.py).
 """
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
+from django.db.models.signals import post_save
 from django.dispatch import receiver
+
+from datasets.models import Dataset
+from experiments.models import Run
 
 from . import services
 from .models import Action
@@ -27,3 +31,18 @@ def log_logout(sender, request, user, **kwargs):
 def log_failed_login(sender, credentials, request=None, **kwargs):
     # Only the username is read. The password in ``credentials`` is never touched.
     services.record_login_failed(credentials.get('username'), request=request)
+
+
+@receiver(post_save, sender=Dataset)
+def log_upload(sender, instance, created, **kwargs):
+    """A Dataset row is only ever created by an upload that passed validation."""
+    if created:
+        services.record(Action.UPLOAD, user=instance.owner, target=f'dataset:{instance.pk}')
+
+
+@receiver(post_save, sender=Run)
+def log_training_start(sender, instance, created, **kwargs):
+    """A Run row is created when POST /api/train accepts a job. Only the target is
+    logged (the run id), never the settings or the data."""
+    if created:
+        services.record(Action.TRAIN_START, user=instance.owner, target=f'run:{instance.pk}')
