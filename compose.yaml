@@ -1,0 +1,17 @@
+services:
+  web:
+    build:
+      context: .
+    container_name: wbmme-web
+    ports:
+      - "8000:8000"
+    environment:
+      DB_PATH: /data/db.sqlite3
+      DATA_ROOT: /data/datasets
+      MODEL_ARTIFACT_ROOT: /data/model_artifacts
+    volumes:
+      - wbmme_data:/data
+    restart: unless-stopped
+
+volumes:
+  wbmme_data:
