@@ -220,6 +220,7 @@ def run_history(request):
             'model': run.model_name,
             'params': run.params_json,
             'status': run.status,
+            'error_message': run.error_message,
             'preprocessing': run.preprocessing_json,
             'metrics': {
                 metric.name: metric.value

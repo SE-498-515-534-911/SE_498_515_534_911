@@ -70,6 +70,7 @@ def test_run_history_includes_run_details_and_metrics(
     assert item["created_at"] is not None
     assert item["started_at"] is None
     assert item["finished_at"] is None
+    assert item["error_message"] == run.error_message
 
 
 def test_run_history_requires_authentication(client):
