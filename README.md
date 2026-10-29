@@ -48,6 +48,59 @@ Application code (Django project, tests, Dockerfile, CI workflow) is added in Sp
 - Work items are tracked as GitHub issues in the linked GitHub Project (2 sprints, story points, epics).
 - Commits are made under each member's own GitHub identity.
 
+## Docker Setup
+
+### Prerequisites
+
+- Docker Desktop on Windows or macOS, or Docker Engine with the Docker Compose plugin on Linux.
+- Git and the WBMME project files.
+
+### Build and Run
+
+From the project root directory, run:
+
+```bash
+docker compose up --build
+```
+
+This command builds the Docker image if required and starts the application. On startup, the container applies database migrations, runs the interrupted-training recovery command, and starts the Django development server.
+
+Open the application in a browser:
+
+`http://localhost:8000/`
+
+### Stop the Application
+
+Press `Ctrl + C` in the terminal running Docker Compose.
+
+To start the application in the background, run:
+
+```bash
+docker compose up --build -d
+```
+
+To stop the background container, run:
+
+```bash
+docker compose down
+```
+
+### Persistent Storage
+
+Docker Compose uses a named volume mounted at `/data` to preserve application data across container restarts and replacements.
+
+- Database: `/data/db.sqlite3`
+- Uploaded datasets: `/data/datasets`
+- Model artifacts: `/data/model_artifacts`
+
+The corresponding environment variables are `DB_PATH`, `DATA_ROOT`, and `MODEL_ARTIFACT_ROOT`.
+
+The named volume is retained when `docker compose down` is run. Do not use `docker compose down -v` unless you intend to delete the persisted volume and its data.
+
+### Development Server Note
+
+The container runs Django's development server for development and demonstration purposes. It is not intended for production deployment without an appropriate production-ready server and deployment configuration.
+
 ## Sprints
 
 | Sprint | Dates |
