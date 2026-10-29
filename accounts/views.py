@@ -3,6 +3,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
 
+from audit import services as audit
+from audit.models import Action
+
 from .forms import LoginForm, RegistrationForm
 from .permissions import admin_required
 
@@ -13,7 +16,8 @@ def register(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
-            form.save()
+            user = form.save()
+            audit.record(Action.REGISTER, user=user, target=f'user:{user.pk}', request=request)
             messages.success(request, 'Account created. Please log in.')
             return redirect('accounts:login')
     else:

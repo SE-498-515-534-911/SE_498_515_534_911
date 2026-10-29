@@ -14,6 +14,8 @@ Any problem moves the run to FAILED with a message that is safe to show.
 import logging
 from dataclasses import dataclass, field
 
+from audit import services as audit
+from audit.models import Action
 from experiments.models import Metric, Run
 from training import pipeline
 from training.artifacts import load_artifact
@@ -107,6 +109,7 @@ def evaluate_and_complete(run):
         run.status = Run.Status.FAILED
         run.error_message = EVALUATION_FAILED
         run.save(update_fields=['status', 'error_message'])
+        audit.record(Action.TRAIN_FAIL, user=run.owner, target=f'run:{run.pk}')  # US-38
         return None
 
     store_metrics(run, evaluation)

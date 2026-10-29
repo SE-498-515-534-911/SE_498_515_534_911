@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 
 from .models import SELF_REGISTRATION_ROLES, Role
+from audit import services as audit
+
 from . import throttle
 from .validators import validate_password_strength, validate_username_format
 
@@ -84,6 +86,7 @@ class LoginForm(AuthenticationForm):
         username = self.cleaned_data.get('username')
         # Checked before the credentials, as in SAD 4.2.1.
         if username and throttle.is_locked(username):
+            audit.record_login_failed(username, request=self.request, target='locked')
             raise forms.ValidationError(self.error_messages['locked'], code='locked')
         try:
             cleaned = super().clean()

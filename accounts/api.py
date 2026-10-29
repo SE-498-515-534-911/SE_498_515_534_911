@@ -10,6 +10,9 @@ from functools import wraps
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse, JsonResponse
 
+from audit import services as audit
+from audit.models import Action
+
 from . import throttle
 from .api_errors import error_response
 from .forms import ApiRegistrationForm
@@ -64,6 +67,7 @@ def register(request):
         )
 
     user = form.save()
+    audit.record(Action.REGISTER, user=user, target=f'user:{user.pk}', request=request)
     return JsonResponse({'user': _user_json(user)}, status=201)
 
 
@@ -79,6 +83,8 @@ def login_view(request):
 
     # Lockout is checked before any credential check (SAD 4.2.1).
     if throttle.is_locked(username):
+        # Django's credential check never runs for a locked account, so log it here.
+        audit.record_login_failed(username, request=request, target='locked')
         return error_response(
             request, 'ACCOUNT_LOCKED',
             'Too many failed logins. Try again in 15 minutes.', 429,
