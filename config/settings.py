@@ -56,6 +56,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Logs refused requests and remembers the caller's address (US-38).
+    'audit.middleware.AuditMiddleware',
     'accounts.middleware.AdminRoleMiddleware',
     # Request size and rate limits, MLE-SR-006 (US-39).
     'training.middleware.RequestLimitsMiddleware',
