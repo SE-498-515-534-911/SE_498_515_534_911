@@ -6,4 +6,6 @@ from . import admin_api
 urlpatterns = [
     path('users', admin_api.list_users, name='api-admin-users'),
     path('users/<int:user_id>', admin_api.update_user, name='api-admin-user'),
+    path('datasets', admin_api.list_datasets, name='api-admin-datasets'),
+    path('datasets/<int:dataset_id>', admin_api.delete_dataset, name='api-admin-dataset'),
 ]

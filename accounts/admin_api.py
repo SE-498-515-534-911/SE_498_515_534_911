@@ -17,11 +17,13 @@ from math import ceil
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 
 from audit import services as audit
 from audit.models import Action
+from datasets.models import Dataset
 
+from . import admin_services
 from .api_errors import error_response
 from .models import Profile, Role
 from .permissions import get_role
@@ -198,3 +200,61 @@ def update_user(request, user_id):
 
     refreshed = get_user_model().objects.select_related('profile').get(pk=target.pk)
     return JsonResponse({'user': _user_json(refreshed)})
+
+
+# ---- datasets ----------------------------------------------------------------------
+
+def _dataset_json(dataset):
+    """A dataset RECORD for the Admin: name, owner, size and upload date (MLE-F-016).
+
+    Never the file path, the row and column counts, the column profile or any
+    cell value: the Admin manages the record, not the data (SAD DD5).
+    """
+    return {
+        'id': dataset.pk,
+        'name': dataset.name,
+        'owner': {'id': dataset.owner_id, 'username': dataset.owner.username},
+        'size_bytes': dataset.size_bytes,
+        'uploaded_at': iso(dataset.uploaded_at),
+    }
+
+
+def list_datasets(request):
+    """GET /api/admin/datasets: every dataset record, newest first (MLE-F-016)."""
+    refused = refuse_unless_admin(request, 'GET')
+    if refused:
+        return refused
+    datasets = Dataset.objects.select_related('owner').order_by('-uploaded_at', '-id')
+    items, meta, error = paginate(request, datasets)
+    if error:
+        return error
+    return JsonResponse({'datasets': [_dataset_json(d) for d in items], 'pagination': meta})
+
+
+def delete_dataset(request, dataset_id):
+    """DELETE /api/admin/datasets/<id>: remove any user's dataset (MLE-F-016).
+
+    The file, the runs made from it and their model files go too. A dataset that
+    a training job is still using is refused (422) so the job is not pulled out
+    from under itself. The deletion is written to the audit log.
+    """
+    refused = refuse_unless_admin(request, 'DELETE')
+    if refused:
+        return refused
+
+    dataset = Dataset.objects.select_related('owner').filter(pk=dataset_id).first()
+    if dataset is None:
+        return error_response(request, 'NOT_FOUND', 'We could not find that dataset.', 404)
+    if admin_services.has_active_runs(dataset):
+        return error_response(
+            request,
+            'UNPROCESSABLE',
+            'This dataset is in use by a training job that has not finished. Try again later.',
+            422,
+        )
+
+    # Note the identifiers now: after deletion the object no longer has them all.
+    target = f'dataset:{dataset.pk} owner:{dataset.owner_id}'
+    admin_services.remove_dataset(dataset)
+    audit.record(Action.ADMIN_DATASET_DELETE, user=request.user, target=target, request=request)
+    return HttpResponse(status=204)
