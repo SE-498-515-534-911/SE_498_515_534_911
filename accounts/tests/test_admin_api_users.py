@@ -113,8 +113,20 @@ def test_a_bad_page_is_400_in_the_standard_envelope(admin_client):
     assert response.json()['error']['code'] == 'VALIDATION_ERROR'
 
 
-def test_the_list_does_not_query_once_per_user(admin_client, admin_user, forty_accounts,
-                                               django_assert_max_num_queries):
-    # session + user + count + one page of users with profiles: a handful, not ~40
-    with django_assert_max_num_queries(8):
-        assert admin_client.get(URL + '?page_size=40').status_code == 200
+def count_queries(client, url):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as queries:
+        assert client.get(url).status_code == 200
+    return len(queries)
+
+
+def test_the_list_does_not_query_once_per_user(admin_client, admin_user, forty_accounts):
+    """A page of 40 users must not cost 35 more queries than a page of 5.
+
+    (The count is compared, not capped: the app runs a few housekeeping queries on
+    some requests, so an absolute limit would fail now and then.)
+    """
+    small = count_queries(admin_client, URL + '?page_size=5')
+    large = count_queries(admin_client, URL + '?page_size=40')
+    assert large - small <= 5

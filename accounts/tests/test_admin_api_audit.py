@@ -125,11 +125,21 @@ def test_the_log_is_paged(admin_client, student):
     assert get(admin_client, '?page_size=101').status_code == 400
 
 
-def test_the_list_does_not_query_once_per_entry(admin_client, student, django_assert_max_num_queries):
+def count_queries(client, url):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as queries:
+        assert client.get(url).status_code == 200
+    return len(queries)
+
+
+def test_the_list_does_not_query_once_per_entry(admin_client, student):
+    """A page of 30 entries must not cost 25 more queries than a page of 5."""
     for i in range(30):
         services.record(Action.UPLOAD, user=student, target=f'dataset:{i}')
-    with django_assert_max_num_queries(8):
-        assert get(admin_client, '?page_size=30').status_code == 200
+    small = count_queries(admin_client, URL + '?page_size=5')
+    large = count_queries(admin_client, URL + '?page_size=30')
+    assert large - small <= 5
 
 
 # ---- who may read ------------------------------------------------------------------------------------
