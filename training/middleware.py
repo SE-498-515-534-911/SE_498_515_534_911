@@ -12,6 +12,8 @@ from accounts.api_errors import error_response
 from . import limits
 
 TOO_LARGE_MESSAGE = 'The request is larger than 10 MB.'
+# A file upload says "file", as the upload validator and SAD 4.4.2 do (found by TC-DATA-02, US-28).
+FILE_TOO_LARGE_MESSAGE = 'The file is larger than 10 MB.'
 RATE_LIMITED_MESSAGE = 'Too many requests. Please wait and try again.'
 
 
@@ -37,6 +39,8 @@ class RequestLimitsMiddleware:
             return response
 
         if limits.body_too_large(request):
-            return _refuse(request, 'PAYLOAD_TOO_LARGE', TOO_LARGE_MESSAGE, 413)
+            is_upload = request.content_type == 'multipart/form-data'
+            message = FILE_TOO_LARGE_MESSAGE if is_upload else TOO_LARGE_MESSAGE
+            return _refuse(request, 'PAYLOAD_TOO_LARGE', message, 413)
 
         return self.get_response(request)
