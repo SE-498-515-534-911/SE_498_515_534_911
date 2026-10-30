@@ -66,6 +66,15 @@ def test_csv_upload_over_10_mb_gets_the_upload_message(student_client):
     assert error(response)['message'] == 'The file is larger than 10 MB.'
 
 
+def test_file_upload_over_the_request_limit_says_file(student_client):
+    """TC-DATA-02: oversize_11MB.csv gets 413 'The file is larger than 10 MB.'"""
+    upload = SimpleUploadedFile('oversize.csv', csv_of_exactly(11 * MB), content_type='text/csv')
+    response = student_client.post('/api/upload', {'file': upload})
+    assert response.status_code == 413
+    assert error(response)['code'] == 'PAYLOAD_TOO_LARGE'
+    assert error(response)['message'] == 'The file is larger than 10 MB.'
+
+
 @pytest.mark.parametrize('header', ['', 'abc'])
 def test_missing_or_malformed_length_is_left_to_django(rf, header):
     request = rf.post('/api/train', data=b'{}', content_type='application/json')
