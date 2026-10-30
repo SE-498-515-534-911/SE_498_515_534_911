@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,results data (/api/evaluate),HTTPError('500 Server Error: Internal Server Error for url: results data (/api/evaluate)'),187,2026-10-30T18:44:38Z,2026-10-30T18:49:29Z
