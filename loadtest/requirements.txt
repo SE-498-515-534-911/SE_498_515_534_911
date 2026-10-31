@@ -1,0 +1,2 @@
+# Tools for the TC-PERF-03 load test (US-30). Not needed to run WBMME itself.
+locust==2.47.0
