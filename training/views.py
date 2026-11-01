@@ -3,10 +3,11 @@
 Errors use the team's standard envelope (SAD 4.3.1) and the codes of the
 error catalogue (SAD 4.4.2) through ``accounts.api_errors.error_response``.
 """
+import csv
 import json
 
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 
 from accounts.api_errors import error_response
 from accounts.permissions import DATA_ROLES, get_role
@@ -259,3 +260,79 @@ def run_history(request):
         })
 
     return JsonResponse({'runs': history})
+
+def _safe_csv_cell(value):
+    """Neutralise spreadsheet formula injection in exported CSV cells."""
+    if value is None:
+        return ''
+
+    if isinstance(value, (int, float)):
+        return value
+
+    text = str(value)
+
+    # Check the first meaningful character after whitespace/control characters.
+    dangerous_prefix = text.lstrip(' \t\r\n\v\f')
+
+    if dangerous_prefix.startswith(('=', '+', '-', '@')):
+        return "'" + text
+
+    return text
+
+def export_run_csv(request, run_id):
+    """GET /api/runs/<run_id>/export: export one owned run as CSV."""
+    refused = _refuse(request, 'GET')
+    if refused:
+        return refused
+
+    run = (
+        Run.objects.select_related('dataset')
+        .prefetch_related('metrics')
+        .filter(pk=run_id, owner=request.user)
+        .first()
+    )
+
+    if run is None:
+        return error_response(
+            request, 'NOT_FOUND', 'We could not find that run.', 404
+        )
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="run-{run.pk}-results.csv"'
+    )
+
+    writer = csv.writer(response)
+    writer.writerow(['Setting', 'Value'])
+
+    settings_rows = [
+        ('run_id', run.pk),
+        ('dataset_id', run.dataset_id),
+        ('dataset_name', run.dataset.name),
+        ('target_column', run.target_column),
+        ('model', run.model_name),
+        ('status', run.status),
+        ('parameters', json.dumps(run.params_json, sort_keys=True)),
+        ('preprocessing', json.dumps(run.preprocessing_json, sort_keys=True)),
+        ('split', json.dumps(run.split_json, sort_keys=True)),
+        ('created_at', _iso(run.created_at)),
+        ('started_at', _iso(run.started_at)),
+        ('finished_at', _iso(run.finished_at)),
+    ]
+
+    for setting, value in settings_rows:
+        writer.writerow([
+            _safe_csv_cell(setting),
+            _safe_csv_cell(value),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['Metric', 'Value'])
+
+    for metric in run.metrics.all():
+        writer.writerow([
+            _safe_csv_cell(metric.name),
+            _safe_csv_cell(metric.value),
+        ])
+
+    return response
