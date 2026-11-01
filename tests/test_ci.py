@@ -1,4 +1,5 @@
 import pytest
+
 from django.apps import apps
 from django.conf import settings
 from django.core.checks import Error, run_checks
