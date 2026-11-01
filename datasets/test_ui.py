@@ -30,12 +30,12 @@ def test_dashboard_shows_user_dataset_count(client, ui_student):
         user=other, defaults={"role": Role.STUDENT}
     )
     Dataset.objects.create(
-        owner=ui_student, name="mine.csv", file_path="/tmp/mine.csv",
+        owner=ui_student, name="mine.csv", file_path="datasets/mine.csv",
         size_bytes=24, rows=4, columns=2,
         profile_json={"preview": [], "columns": []},
     )
     Dataset.objects.create(
-        owner=other, name="not-mine.csv", file_path="/tmp/other.csv",
+        owner=other, name="not-mine.csv", file_path="datasets/other.csv",
         size_bytes=24, rows=4, columns=2,
         profile_json={"preview": [], "columns": []},
     )
