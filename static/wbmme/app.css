@@ -356,3 +356,253 @@ button:focus-visible, a.button:focus-visible, input[type="submit"]:focus-visible
   .footer { padding: 15px; }
   .auth-card { padding: 29px 23px; }
 }
+
+/* ========================================
+   MODEL CATALOGUE
+======================================== */
+
+.model-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    margin: 24px 0;
+    align-items: start;
+}
+
+.model-card {
+    padding: 26px 30px;
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: var(--shadow);
+    text-align: left;
+}
+
+.model-card h3 {
+    margin: 0 0 12px;
+    color: var(--ink);
+    font: 700 17px 'Manrope', sans-serif;
+}
+
+.model-card p {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.model-card .button {
+    margin-top: 8px;
+}
+
+.model-configuration {
+    margin-top: 20px;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #f8faf7;
+}
+
+.training-parameter-panel {
+    padding: 26px 30px;
+}
+
+.training-parameter-panel .panel-heading {
+    margin-bottom: 20px;
+}
+
+.parameter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 22px;
+}
+
+.parameter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.parameter-field input,
+.parameter-field select {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+}
+
+#parameter-error {
+    margin-bottom: 12px;
+    color: var(--danger);
+}
+
+#validation-result {
+    margin-top: 15px;
+    color: var(--mint-strong);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+    .model-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .parameter-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .model-card {
+        padding: 20px;
+    }
+
+    .training-parameter-panel {
+        padding: 20px;
+    }
+}
+
+/* Model catalogue final layout fix */
+
+#model-grid {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 22px;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+#model-grid .model-card {
+    padding: 28px 32px !important;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+#parameter-panel {
+    width: 100%;
+    margin-top: 22px;
+    padding: 26px 30px !important;
+    box-sizing: border-box;
+}
+
+#parameter-fields {
+    display: grid !important;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 20px;
+    width: 100%;
+}
+
+#parameter-fields .parameter-field {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch;
+    gap: 9px;
+    min-width: 0;
+    line-height: 1.5;
+}
+
+#parameter-fields .parameter-field input,
+#parameter-fields .parameter-field select {
+    width: 100%;
+    min-height: 42px;
+    box-sizing: border-box;
+    padding: 10px 12px;
+}
+
+#parameter-panel .panel-heading {
+    margin-bottom: 24px;
+}
+
+@media (max-width: 800px) {
+    #model-grid,
+    #parameter-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Main model cards - horizontal spacing */
+#model-grid {
+    padding: 20px 35px !important;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+#model-grid .model-card {
+    padding: 28px 32px !important;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 700px) {
+    #model-grid {
+        padding: 12px 16px !important;
+    }
+
+    #model-grid .model-card {
+        padding: 22px !important;
+    }
+}
+
+/* Model page content alignment */
+body:has(#model-grid) .page-content {
+    padding-left: 42px !important;
+    padding-right: 42px !important;
+}
+
+#model-grid {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0 !important;
+}
+
+#model-grid .model-card {
+    padding: 26px 30px !important;
+}
+
+@media (max-width: 760px) {
+    body:has(#model-grid) .page-content {
+        padding-left: 18px !important;
+        padding-right: 18px !important;
+    }
+}
+
+/* Training configuration page */
+.training-config-panel {
+    padding: 28px;
+}
+
+.training-config-panel h3 {
+    margin: 24px 0 14px;
+}
+
+.training-config-panel .field-label {
+    display: block;
+    margin: 12px 0 7px;
+}
+
+.training-config-panel .form-control {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+}
+
+#parameter-fields {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 12px 22px;
+}
+
+@media (max-width: 650px) {
+    #parameter-fields {
+        grid-template-columns: 1fr;
+    }
+}

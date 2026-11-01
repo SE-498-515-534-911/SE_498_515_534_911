@@ -162,19 +162,25 @@ def start_training(request):
         )
 
     # Check again and create in one step, so two quick requests cannot both pass.
-    with limits.job_quota_lock, transaction.atomic():
+        # Check quota and create the run.
+    with limits.job_quota_lock:
         if _active_jobs(request.user) >= quota:
             return _job_limit_reached(request, quota)
-        run = Run.objects.create(
-            owner=request.user,
-            dataset=dataset,
-            target_column=parsed.target_column,
-            model_name=parsed.model,
-            params_json=parsed.params,
-            preprocessing_json=parsed.preprocessing,
-            split_json=parsed.split,
-        )
-        jobs.submit(run.pk)
+
+        with transaction.atomic():
+            run = Run.objects.create(
+                owner=request.user,
+                dataset=dataset,
+                target_column=parsed.target_column,
+                model_name=parsed.model,
+                params_json=parsed.params,
+                preprocessing_json=parsed.preprocessing,
+                split_json=parsed.split,
+            )
+
+    # Submit only after the database transaction commits.
+    jobs.submit(run.pk)
+
     return JsonResponse(
         {
             'run_id': run.pk,

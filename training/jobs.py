@@ -11,6 +11,14 @@ A failed run never leaves a model behind: the worker writes into a private
 scratch folder that is always deleted, and only a successful model is signed
 and moved into the user's directory.
 """
+
+import os
+
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import logging
 import shutil
 import threading

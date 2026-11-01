@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="welcome-row">
+    <div>
+        <h1>Training Configuration</h1>
+        <p>Configure your dataset, model, preprocessing and training settings.</p>
+    </div>
+</section>
+
+<div class="workspace-layout">
+    <section class="panel training-config-panel">
+        <div class="panel-heading">
+            <h2>Configure Training</h2>
+        </div>
+
+        <form id="training-form" class="form-stack">
+            {% csrf_token %}
+
+            <div>
+                <label class="field-label" for="dataset-select">Dataset</label>
+                <select id="dataset-select" class="form-control" required>
+                    <option value="">Select a dataset</option>
+                    {% for dataset in datasets %}
+                    <option
+                        value="{{ dataset.id }}"
+                        data-profile="{{ dataset.profile_json_text|escape }}"
+                    >
+                        {{ dataset.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="target-select">Target Column</label>
+                <select id="target-select" class="form-control" required disabled>
+                    <option value="">Select a dataset first</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="model-select">ML Model</label>
+                <select id="model-select" class="form-control" required>
+                    <option value="">Loading models...</option>
+                </select>
+            </div>
+
+            <div id="parameter-section" hidden>
+                <h3>Model Parameters</h3>
+                <div id="parameter-fields"></div>
+            </div>
+
+            <div>
+                <h3>Preprocessing</h3>
+
+                <label class="field-label" for="missing-select">
+                    Missing Values
+                </label>
+                <select id="missing-select" class="form-control">
+                    <option value="median" selected>Median</option>
+                    <option value="mean">Mean</option>
+                    <option value="most_frequent">Most Frequent</option>
+                    <option value="drop_rows">Drop Rows</option>
+                </select>
+
+                <label class="field-label" for="categorical-select">
+                    Categorical Features
+                </label>
+                <select id="categorical-select" class="form-control">
+                    <option value="one_hot" selected>One-Hot Encoding</option>
+                    <option value="ordinal">Ordinal Encoding</option>
+                </select>
+            </div>
+
+            <div>
+                <h3>Train-Test Split</h3>
+
+                <label class="field-label" for="test-size">
+                    Test Data Percentage
+                </label>
+                <select id="test-size" class="form-control">
+                    <option value="0.1">10%</option>
+                    <option value="0.15">15%</option>
+                    <option value="0.2" selected>20%</option>
+                    <option value="0.25">25%</option>
+                    <option value="0.3">30%</option>
+                    <option value="0.35">35%</option>
+                    <option value="0.4">40%</option>
+                    <option value="0.45">45%</option>
+                    <option value="0.5">50%</option>
+                </select>
+
+                <label class="field-label" for="random-state">
+                    Random State
+                </label>
+                <input
+                    type="number"
+                    id="random-state"
+                    class="form-control"
+                    value="42"
+                    min="0"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="button" id="train-button">
+                Start Training
+            </button>
+        </form>
+
+        <div id="training-message" class="inline-status" role="status"></div>
+    </section>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const datasetSelect = document.getElementById("dataset-select");
+    const targetSelect = document.getElementById("target-select");
+    const modelSelect = document.getElementById("model-select");
+    const parameterSection = document.getElementById("parameter-section");
+    const parameterFields = document.getElementById("parameter-fields");
+    const trainingForm = document.getElementById("training-form");
+    const trainingMessage = document.getElementById("training-message");
+    const trainButton = document.getElementById("train-button");
+
+    let models = [];
+    let selectedModel = null;
+
+    function getCookie(name) {
+        const cookies = document.cookie.split(";");
+        for (const cookie of cookies) {
+            const trimmed = cookie.trim();
+            if (trimmed.startsWith(name + "=")) {
+                return decodeURIComponent(trimmed.substring(name.length + 1));
+            }
+        }
+        return "";
+    }
+
+    function showMessage(message, type = "") {
+        trainingMessage.textContent = message;
+        trainingMessage.className = "inline-status " + type;
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, {
+            credentials: "same-origin",
+            ...options,
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                ...(options.headers || {})
+            }
+        });
+
+        const data = await response.json();
+
+        console.log("API RESPONSE:", {
+            url,
+            status: response.status,
+            data
+        });
+
+        if (!response.ok) {
+            const message =
+                data.error?.message ||
+                data.message ||
+                data.detail ||
+                (typeof data.error === "string" ? data.error : null) ||
+                JSON.stringify(data);
+
+            throw new Error(message);
+        }
+        return data;
+    }
+
+    datasetSelect.addEventListener("change", () => {
+        targetSelect.innerHTML = "";
+        targetSelect.disabled = true;
+
+        const option = datasetSelect.selectedOptions[0];
+
+        if (!option || !option.value) {
+            targetSelect.innerHTML =
+                '<option value="">Select a dataset first</option>';
+            return;
+        }
+
+        try {
+            const profile = JSON.parse(option.dataset.profile || "{}");
+            const columns = profile.columns || [];
+
+            targetSelect.innerHTML =
+                '<option value="">Select target column</option>';
+
+            columns.forEach(column => {
+                const columnName = column.name;
+                if (!columnName) return;
+
+                const columnOption = document.createElement("option");
+                columnOption.value = columnName;
+                columnOption.textContent = columnName;
+                targetSelect.appendChild(columnOption);
+            });
+
+            targetSelect.disabled = columns.length === 0;
+
+            if (columns.length === 0) {
+                targetSelect.innerHTML =
+                    '<option value="">No columns available</option>';
+            }
+        } catch (error) {
+            showMessage("Could not load dataset columns.", "status-error");
+        }
+    });
+
+    function renderParameters(model) {
+        parameterFields.innerHTML = "";
+
+        (model.params || []).forEach(param => {
+            const wrapper = document.createElement("div");
+            wrapper.style.marginBottom = "18px";
+
+            const label = document.createElement("label");
+            label.className = "field-label";
+            label.htmlFor = "param-" + param.name;
+            label.textContent = param.label;
+
+            let input;
+
+            if (param.kind === "choice") {
+                input = document.createElement("select");
+
+                param.choices.forEach(choice => {
+                    const option = document.createElement("option");
+                    option.value = choice;
+                    option.textContent = choice;
+                    input.appendChild(option);
+                });
+
+                input.value = param.default;
+            } else {
+                input = document.createElement("input");
+                input.type = "number";
+
+                if (param.kind === "float") {
+                    input.step = "any";
+                } else {
+                    input.step = "1";
+                }
+
+                input.value = param.default ?? "";
+                input.min = param.minimum ?? "";
+                input.max = param.maximum ?? "";
+            }
+
+            input.id = "param-" + param.name;
+            input.dataset.param = param.name;
+            input.className = "form-control";
+
+            if (param.kind === "int_or_none") {
+                input.placeholder = "Leave empty for no limit";
+            }
+
+            wrapper.append(label, input);
+            parameterFields.appendChild(wrapper);
+        });
+
+        parameterSection.hidden = false;
+    }
+
+    async function loadModels() {
+        try {
+            const data = await apiRequest("/api/models", {
+                method: "GET",
+                headers: {}
+            });
+
+            models = data.models || data;
+            modelSelect.innerHTML =
+                '<option value="">Select a model</option>';
+
+            models.forEach(model => {
+                const option = document.createElement("option");
+                option.value = model.key;
+                option.textContent = model.label || model.key;
+                modelSelect.appendChild(option);
+            });
+        } catch (error) {
+            modelSelect.innerHTML =
+                '<option value="">Unable to load models</option>';
+            showMessage(error.message, "status-error");
+        }
+    }
+
+    modelSelect.addEventListener("change", () => {
+        selectedModel = models.find(
+            model => model.key === modelSelect.value
+        );
+
+        parameterSection.hidden = true;
+        parameterFields.innerHTML = "";
+
+        if (selectedModel) {
+            renderParameters(selectedModel);
+        }
+    });
+
+    function collectParameters() {
+        const params = {};
+
+        parameterFields.querySelectorAll("[data-param]").forEach(input => {
+            const name = input.dataset.param;
+
+            if (input.value === "" && input.type === "number") {
+                params[name] = null;
+            } else if (input.type === "number") {
+                params[name] = input.step === "any"
+                    ? Number(input.value)
+                    : parseInt(input.value, 10);
+            } else {
+                params[name] = input.value;
+            }
+        });
+
+        return params;
+    }
+
+    async function pollTraining(runId) {
+        const terminalStatuses = ["SUCCEEDED", "FAILED", "COMPLETED"];
+
+        for (let attempt = 0; attempt < 120; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            console.log("POLLING URL:", `/api/train/${runId}`);
+
+            try {
+                const data = await apiRequest(`/api/train/${runId}`, {
+                    method: "GET",
+                    headers: {}
+                });
+
+                const status = data.status || "UNKNOWN";
+                showMessage(`Training status: ${status}`);
+
+                if (terminalStatuses.includes(status.toUpperCase())) {
+                    showMessage(
+                        `Training finished. Run ID: ${runId}. Status: ${status}`,
+                        status.toUpperCase() === "FAILED"
+                            ? "status-error"
+                            : "status-success"
+                    );
+                    trainButton.disabled = false;
+                    trainButton.textContent = "Start Training";
+                    return;
+                }
+            } catch (error) {
+                showMessage(`Unable to retrieve training status: ${error.message}`,
+                    "status-error");
+                trainButton.disabled = false;
+                trainButton.textContent = "Start Training";
+                return;
+            }
+        }
+
+        showMessage(
+            `Training is still in progress. Run ID: ${runId}. Check the run history later.`
+        );
+        trainButton.disabled = false;
+        trainButton.textContent = "Start Training";
+    }
+
+    trainingForm.addEventListener("submit", async event => {
+        event.preventDefault();
+
+        if (!selectedModel) {
+            showMessage("Please select a model.", "status-error");
+            return;
+        }
+
+        if (!datasetSelect.value || !targetSelect.value) {
+            showMessage("Please select a dataset and target column.",
+                "status-error");
+            return;
+        }
+
+        const payload = {
+            dataset_id: Number(datasetSelect.value),
+            target_column: targetSelect.value,
+            model: selectedModel.key,
+            params: collectParameters(),
+            preprocessing: {
+                missing: document.getElementById("missing-select").value,
+                categorical:
+                    document.getElementById("categorical-select").value
+            },
+            split: {
+                test_size: Number(document.getElementById("test-size").value),
+                random_state:
+                    Number(document.getElementById("random-state").value)
+            }
+        };
+
+        trainButton.disabled = true;
+        trainButton.textContent = "Starting...";
+        showMessage("Submitting training request...");
+
+        try {
+            const data = await apiRequest("/api/train", {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+
+            const runId = data.run_id;
+            console.log("TRAIN RESPONSE:", data);
+            console.log("RUN ID:", runId);
+            showMessage(
+                `Training queued successfully. Run ID: ${runId}`,
+                "status-success"
+            );
+
+            if (runId) {
+                showMessage(`Training queued. Run ID: ${runId}. Waiting for status...`);
+                await pollTraining(runId);
+            } else {
+                trainButton.disabled = false;
+                trainButton.textContent = "Start Training";
+            }
+        } catch (error) {
+            showMessage(error.message, "status-error");
+            trainButton.disabled = false;
+            trainButton.textContent = "Start Training";
+        }
+    });
+
+    loadModels();
+});
+</script>
+{% endblock %}

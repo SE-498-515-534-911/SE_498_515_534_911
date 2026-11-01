@@ -13,8 +13,16 @@ result.json is one of:
 A process that dies without writing result.json (killed, out of memory,
 native crash) is detected by the runner.
 """
-import json
+
 import os
+
+# Limit numerical-library threads before Django or ML libraries are imported.
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+import json
 import traceback
 from pathlib import Path
 
