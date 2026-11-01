@@ -3,6 +3,7 @@ URL configuration for config project.
 """
 from django.contrib import admin
 from django.urls import include, path
+from training import page_urls
 
 
 urlpatterns = [
@@ -13,5 +14,7 @@ urlpatterns = [
     path('api/', include('training.urls')),
     path('api/evaluate/', include('evaluation.urls')),
     path('', include('evaluation.page_urls')),
+    path('', include('training.page_urls')),
     path('', include('datasets.urls')),
+    path('', include(page_urls)),
 ]
