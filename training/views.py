@@ -259,3 +259,98 @@ def run_history(request):
         })
 
     return JsonResponse({'runs': history})
+
+def compare_runs(request):
+    """POST /api/runs/compare: compare 2-4 runs owned by the caller."""
+    refused = _refuse(request, 'POST')
+    if refused:
+        return refused
+
+    body = _json_object(request)
+    if body is None:
+        return _not_a_json_object(request)
+
+    run_ids = body.get('run_ids')
+    errors = []
+
+    if not isinstance(run_ids, list):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'run_ids must be a list of 2 to 4 run IDs.',
+        })
+    elif not 2 <= len(run_ids) <= 4:
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Select between 2 and 4 runs.',
+        })
+    elif any(
+        isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0
+        for run_id in run_ids
+    ):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Every run ID must be a positive integer.',
+        })
+    elif len(set(run_ids)) != len(run_ids):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Duplicate run IDs are not allowed.',
+        })
+
+    if errors:
+        return _validation_errors(request, errors)
+
+    runs_by_id = {
+        run.pk: run
+        for run in Run.objects.filter(
+            owner=request.user,
+            pk__in=run_ids,
+        ).select_related('dataset').prefetch_related('metrics')
+    }
+
+    # Do not reveal whether an unavailable run belongs to another user.
+    if len(runs_by_id) != len(run_ids):
+        return error_response(
+            request, 'NOT_FOUND',
+            'One or more runs could not be found.', 404,
+        )
+
+    runs = [runs_by_id[run_id] for run_id in run_ids]
+    reference = runs[0]
+
+    if any(
+        run.dataset_id != reference.dataset_id
+        or run.target_column != reference.target_column
+        for run in runs[1:]
+    ):
+        return _validation_errors(request, [{
+            'field': 'run_ids',
+            'message': 'All runs must use the same dataset and target column.',
+        }])
+
+    comparisons = []
+    for run in runs:
+        comparisons.append({
+            'run_id': run.pk,
+            'dataset_id': run.dataset_id,
+            'target_column': run.target_column,
+            'model': run.model_name,
+            'params': run.params_json,
+            'preprocessing': run.preprocessing_json,
+            'split': run.split_json,
+            'status': run.status,
+            'metrics': {
+                metric.name: metric.value
+                for metric in run.metrics.all()
+            },
+            'created_at': _iso(run.created_at),
+            'links': {
+                'status': f'/api/train/{run.pk}',
+            },
+        })
+
+    return JsonResponse({
+        'dataset_id': reference.dataset_id,
+        'target_column': reference.target_column,
+        'runs': comparisons,
+    })
