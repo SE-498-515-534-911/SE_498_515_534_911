@@ -101,6 +101,29 @@ The named volume is retained when `docker compose down` is run. Do not use `dock
 
 The container runs Django's development server for development and demonstration purposes. It is not intended for production deployment without an appropriate production-ready server and deployment configuration.
 
+## ML Workflow
+
+WBMME provides an end-to-end machine-learning workflow through its web interface.
+
+### Workflow
+
+1. **Datasets:** Upload and manage CSV datasets.
+2. **Models:** Browse the available machine-learning models.
+3. **Training:** Select a dataset, target column, model and supported hyperparameters to start training.
+4. **Experiments:** View previous training runs, their status and associated evaluation metrics.
+5. **Evaluation:** View completed model results, including accuracy, precision, recall, F1-score, confusion matrix and feature importance where available.
+
+### Accessing the Workflow
+
+After starting the application and logging in:
+
+- Use **Datasets** to manage datasets.
+- Use **Models** to explore available algorithms.
+- Use **Training** to configure and start a model run.
+- Use **Evaluation** to review experiments and model results.
+
+Training runs and evaluation results are associated with the logged-in user.
+
 ## Sprints
 
 | Sprint | Dates |

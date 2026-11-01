@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Experiments · WBMME{% endblock %}
+{% block breadcrumb %}Experiments{% endblock %}
+
+{% block content %}
+<section class="welcome-row">
+    <div>
+        <div class="eyebrow">YOUR WORKSPACE / EXPERIMENTS</div>
+        <h1>Experiments</h1>
+        <p class="muted">Track your training runs and review model evaluation results.</p>
+    </div>
+    <a class="button button-primary" href="{% url 'training_configuration' %}">
+        New training run
+    </a>
+</section>
+
+<section class="panel" style="padding: 22px; margin-top: 22px;">
+    <div class="panel-heading">
+        <div>
+            <div class="eyebrow">TRAINING HISTORY</div>
+            <h2>Your experiments</h2>
+            <p class="muted">{{ runs|length }} training run{{ runs|length|pluralize }}</p>
+        </div>
+    </div>
+
+    {% if runs %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Run</th>
+                    <th>Model</th>
+                    <th>Dataset</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Test accuracy</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td><strong>#{{ run.pk }}</strong></td>
+                    <td>{{ run.model_name|title }}</td>
+                    <td>{{ run.dataset.name }}</td>
+                    <td>{{ run.target_column }}</td>
+                    <td>
+                        <span class="status-pill {% if run.status == 'COMPLETED' %}status-ready{% elif run.status == 'FAILED' %}status-error{% else %}status-pending{% endif %}">
+                            {{ run.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ run.created_at|date:"M j, Y, H:i" }}</td>
+                    <td>
+                        {% for metric in run.metrics.all %}
+                            {% if metric.name == "test_accuracy" %}
+                                {{ metric.value|floatformat:3 }}
+                            {% endif %}
+                        {% empty %}
+                            —
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% if run.status == 'TRAINED' or run.status == 'COMPLETED' %}
+                            <a class="text-link" href="{% url 'run-results' run.pk %}">
+                                View results →
+                            </a>
+                        {% elif run.status == 'FAILED' %}
+                            <span class="muted" title="{{ run.error_message }}">Failed</span>
+                        {% else %}
+                            <span class="muted">In progress</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No experiments yet</h3>
+        <p>Your training runs will appear here after you train your first model.</p>
+        <a class="button button-secondary" href="{% url 'training_configuration' %}">
+            Configure a model
+        </a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

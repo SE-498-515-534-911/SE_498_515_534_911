@@ -1,0 +1,278 @@
+@'
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Model Catalogue | WBMME{% endblock %}
+{% block breadcrumb %}Models{% endblock %}
+
+{% block content %}
+<section class="section-intro">
+    <div>
+        <span class="hero-kicker">MACHINE LEARNING</span>
+        <h2>Model Catalogue</h2>
+        <p>Explore available algorithms and configure their hyperparameters.</p>
+    </div>
+</section>
+
+<div id="model-message" class="message" hidden></div>
+<div id="model-grid" class="model-grid">
+    <div class="panel empty-state">Loading available models...</div>
+</div>
+
+<section id="parameter-panel" class="panel training-parameter-panel" hidden>
+    <div class="panel-heading">
+        <div>
+            <span class="hero-kicker">CONFIGURATION</span>
+            <h2 id="selected-model-title">Model configuration</h2>
+            <p id="selected-model-description"></p>
+        </div>
+    </div>
+
+    <form id="parameter-form">
+        <div id="parameter-fields" class="parameter-grid"></div>
+        <div id="parameter-error" role="alert"></div>
+        <button type="submit" class="button button-primary">Validate parameters</button>
+    </form>
+
+    <div id="validation-result" role="status"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const modelGrid = document.getElementById("model-grid");
+const messageBox = document.getElementById("model-message");
+const parameterPanel = document.getElementById("parameter-panel");
+const parameterFields = document.getElementById("parameter-fields");
+const parameterError = document.getElementById("parameter-error");
+const validationResult = document.getElementById("validation-result");
+
+let selectedModel = null;
+
+function showMessage(message) {
+    messageBox.textContent = message;
+    messageBox.hidden = false;
+}
+
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+        document.querySelector('meta[name="csrf-token"]')?.content || "";
+}
+
+function renderModels(models) {
+    modelGrid.replaceChildren();
+
+    models.forEach(model => {
+        const card = document.createElement("article");
+        card.className = "panel model-card";
+
+        const title = document.createElement("h3");
+        title.textContent = model.label;
+
+        const description = document.createElement("p");
+        description.textContent = model.description;
+
+        const parameters = document.createElement("p");
+        parameters.textContent =
+            `${model.params.length} configurable hyperparameters`;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button button-primary";
+        button.textContent = "Configure model";
+        button.addEventListener("click", () => selectModel(model, card));
+
+        card.append(title,description,parameters,button);
+        modelGrid.appendChild(card);
+    });
+}
+
+function selectModel(model, card) {
+    selectedModel = model;
+    parameterError.textContent = "";
+    validationResult.textContent = "";
+
+    document.getElementById("selected-model-title").textContent = model.label;
+    document.getElementById("selected-model-description").textContent =
+        model.description;
+
+    parameterFields.replaceChildren();
+
+    // Force a clean two-column layout
+    parameterFields.style.cssText = `
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        width: 100%;
+    `;
+
+    model.params.forEach(param => {
+        const wrapper = document.createElement("div");
+
+        wrapper.style.cssText = `
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch;
+            gap: 9px;
+            min-width: 0;
+        `;
+
+        const fieldTitle = document.createElement("label");
+        fieldTitle.textContent = `${param.label} (${param.range})`;
+
+        fieldTitle.style.cssText = `
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.5;
+            color: #34443b;
+        `;
+
+        let input;
+
+        if (param.kind === "choice") {
+            input = document.createElement("select");
+
+            param.choices.forEach(choice => {
+                const option = document.createElement("option");
+                option.value = choice;
+                option.textContent = choice;
+                input.appendChild(option);
+            });
+        } else {
+            input = document.createElement("input");
+            input.type = "number";
+
+            input.step = ["int", "int_or_none"].includes(param.kind)
+                ? "1"
+                : "any";
+
+            if (param.minimum !== null) input.min = param.minimum;
+            if (param.maximum !== null) input.max = param.maximum;
+
+            if (param.kind === "int_or_none") {
+                input.placeholder = "Leave empty for no limit";
+            }
+        }
+
+        input.name = param.name;
+        input.dataset.kind = param.kind;
+
+        if (param.default !== null) {
+            input.value = param.default;
+        }
+
+        input.style.cssText = `
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            min-height: 42px;
+            box-sizing: border-box;
+            padding: 9px 12px;
+            border: 1px solid #dce5dc;
+            border-radius: 8px;
+            background: white;
+            font-size: 13px;
+        `;
+
+        wrapper.appendChild(fieldTitle);
+        wrapper.appendChild(input);
+        parameterFields.appendChild(wrapper);
+    });
+
+    parameterPanel.classList.add("model-configuration");
+    card.appendChild(parameterPanel);
+    parameterPanel.hidden = false;
+
+    parameterPanel.style.cssText = `
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 20px;
+        padding: 26px;
+        background: #f8faf7;
+        border: 1px solid #e0e9df;
+        border-radius: 14px;
+    `;
+
+    parameterPanel.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest"
+    });
+}
+
+
+document.getElementById("parameter-form").addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!selectedModel) return;
+
+    const params = {};
+
+    parameterFields.querySelectorAll("input,select").forEach(input => {
+        const value = input.value.trim();
+
+        if (input.dataset.kind === "int_or_none" && value === "") {
+            params[input.name] = null;
+        } else if (input.dataset.kind === "int") {
+            params[input.name] = Number.parseInt(value,10);
+        } else if (input.dataset.kind === "float") {
+            params[input.name] = Number(value);
+        } else {
+            params[input.name] = value;
+        }
+    });
+
+    parameterError.textContent = "";
+    validationResult.textContent = "Validating...";
+
+    try {
+        const response = await fetch(
+            `/api/models/${encodeURIComponent(selectedModel.key)}/params/validate`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCsrfToken()
+                },
+                body: JSON.stringify({params})
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || data.error?.message ||
+                "Parameter validation failed.");
+        }
+
+        validationResult.textContent =
+            "Parameters validated successfully. " +
+            JSON.stringify(data.params);
+
+    } catch (error) {
+        validationResult.textContent = "";
+        parameterError.textContent = error.message;
+    }
+});
+
+async function loadModels() {
+    try {
+        const response = await fetch("/api/models");
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Unable to load models.");
+        }
+
+        renderModels(data.models);
+    } catch (error) {
+        modelGrid.replaceChildren();
+        showMessage(error.message);
+    }
+}
+
+loadModels();
+</script>
+{% endblock %}
+'@ | Set-Content templates\training\models.html

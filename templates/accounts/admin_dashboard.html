@@ -1,6 +1,67 @@
 {% extends "base.html" %}
-{% block title %}Admin dashboard - WBMME{% endblock %}
+{% load static %}
+{% block title %}Admin panel · WBMME{% endblock %}
+{% block breadcrumb %}Admin panel{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'wbmme/admin_console.css' %}">{% endblock %}
 {% block content %}
-<h1>Admin dashboard</h1>
-<p>Only accounts with the Admin role can see this page.</p>
+<section id="admin-console" class="admin-console" data-current-user-id="{{ user.pk }}">
+  <div class="admin-head">
+    <div class="eyebrow">ADMINISTRATION</div>
+    <h1>Admin panel</h1>
+    <p class="muted">Manage accounts and dataset records, and review the audit log.
+      Dataset contents are never shown here.</p>
+  </div>
+
+  <div id="console-message" class="console-message" role="status" aria-live="polite" hidden></div>
+
+  <div class="console-tabs" role="tablist" aria-label="Admin panel sections">
+    <button type="button" role="tab" id="tab-users" data-tab="users" aria-selected="true" aria-controls="panel-users">Users</button>
+    <button type="button" role="tab" id="tab-datasets" data-tab="datasets" aria-selected="false" aria-controls="panel-datasets">Datasets</button>
+    <button type="button" role="tab" id="tab-audit" data-tab="audit" aria-selected="false" aria-controls="panel-audit">Audit log</button>
+  </div>
+
+  <section id="panel-users" class="panel console-panel" role="tabpanel" aria-labelledby="tab-users">
+    <div class="table-wrap">
+      <table class="data-table" id="users-table">
+        <caption class="visually-hidden">User accounts</caption>
+        <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Status</th>
+          <th scope="col">Joined</th><th scope="col">Last login</th><th scope="col">Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="users-pager"></div>
+  </section>
+
+  <section id="panel-datasets" class="panel console-panel" role="tabpanel" aria-labelledby="tab-datasets" hidden>
+    <div class="table-wrap">
+      <table class="data-table" id="datasets-table">
+        <caption class="visually-hidden">Dataset records</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col">Owner</th><th scope="col">Size</th>
+          <th scope="col">Uploaded</th><th scope="col">Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="datasets-pager"></div>
+  </section>
+
+  <section id="panel-audit" class="panel console-panel" role="tabpanel" aria-labelledby="tab-audit" hidden>
+    <div class="audit-filter">
+      <label for="audit-action">Show</label>
+      <select id="audit-action">
+        <option value="">All events</option>
+        {% for value, label in actions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="audit-table">
+        <caption class="visually-hidden">Audit log, newest first</caption>
+        <thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Event</th>
+          <th scope="col">Item</th><th scope="col">Address</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="audit-pager"></div>
+  </section>
+</section>
 {% endblock %}
+{% block scripts %}<script src="{% static 'wbmme/admin_console.js' %}"></script>{% endblock %}

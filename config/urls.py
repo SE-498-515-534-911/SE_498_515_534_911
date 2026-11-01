@@ -3,14 +3,20 @@ URL configuration for config project.
 """
 from django.contrib import admin
 from django.urls import include, path
+from training import page_urls
+from experiments import page_urls as experiment_page_urls
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('api/auth/', include('accounts.api_urls')),
+    path('api/admin/', include('accounts.admin_urls')),
     path('api/', include('training.urls')),
     path('api/evaluate/', include('evaluation.urls')),
     path('', include('evaluation.page_urls')),
+    path('', include('training.page_urls')),
     path('', include('datasets.urls')),
+    path('', include(page_urls)),
+    path('', include(experiment_page_urls)),
 ]

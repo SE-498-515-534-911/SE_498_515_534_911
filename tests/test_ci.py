@@ -10,6 +10,7 @@ def test_ci_setup():
     assert apps.is_installed("accounts")
     assert apps.is_installed("datasets")
 
+
 @pytest.mark.django_db
 def test_django_system_checks():
     errors = run_checks()

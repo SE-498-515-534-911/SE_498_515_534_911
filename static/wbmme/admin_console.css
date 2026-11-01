@@ -1,0 +1,20 @@
+/* Admin panel (US-37). Kept apart from app.css, which belongs to the UI foundation. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.admin-head { margin-bottom: 18px; }
+.console-message { margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: #e9f4ec; color: #44724f; font-size: 12px; }
+.console-message.is-error { background: #fae9e5; color: #9e4e43; }
+.console-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.console-tabs button { min-height: 36px; padding: 0 16px; font-size: 12px; }
+.console-tabs button[aria-selected="true"] { background: #e0efdf; color: #294d32; border-color: #c9e2c8; font-weight: 700; }
+.console-panel { padding: 8px 0 14px; }
+.console-panel .data-table { font-size: 12px; }
+.console-panel .data-table td, .console-panel .data-table th { white-space: normal; }
+.console-panel select { min-height: 32px; font-size: 12px; }
+.console-panel td button { min-height: 30px; padding: 0 12px; font-size: 11px; }
+.console-panel td button.is-danger { background: #fae9e5; color: #9e4e43; border-color: #f0cfc8; }
+.status-off { background: #fae9e5; color: #9e4e43; }
+.you-tag { margin-left: 6px; color: var(--muted); font-size: 11px; }
+.audit-filter { display: flex; align-items: center; gap: 10px; padding: 10px 14px 14px; font-size: 12px; }
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 14px 0; font-size: 12px; color: var(--muted); }
+.pager button { min-height: 30px; padding: 0 12px; font-size: 11px; }
+.empty-row td { text-align: center; color: var(--muted); }

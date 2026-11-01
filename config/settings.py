@@ -92,6 +92,17 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.environ.get('DB_PATH', BASE_DIR / 'db.sqlite3'),
+        # Many users at once (MLE-NF-003, US-30 load test). With the defaults,
+        # two requests writing at the same moment failed with "database is
+        # locked" (HTTP 500). Django's recommended SQLite settings for
+        # concurrent use: wait up to 20 s for a lock instead of failing, take
+        # the write lock at the start of a transaction, and use WAL so that
+        # readers never block the writer.
+        'OPTIONS': {
+            'timeout': 20,
+            'transaction_mode': 'IMMEDIATE',
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
+        },
     }
 }
 

@@ -18,4 +18,5 @@ urlpatterns = [
         views.export_run_csv,
         name='api-run-export',
     ),
+    path('runs/compare', views.compare_runs, name='api-run-compare'),
 ]
