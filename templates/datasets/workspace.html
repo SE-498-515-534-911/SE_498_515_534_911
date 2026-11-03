@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Datasets · WBMME{% endblock %}
 {% block breadcrumb %}Datasets{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'wbmme/datasets_page.css' %}">{% endblock %}
 
 {% block content %}
 <section class="welcome-row">
@@ -75,12 +77,16 @@
            attribute written with escapejs, which is for JavaScript strings: JSON.parse cannot read
            that, so Preview did nothing. json_script writes valid JSON and is safe inside HTML.{% endcomment %}
         {{ dataset.profile_json|json_script:element_id }}
-        <button
-          class="preview-button"
-          type="button"
-          data-preview-source="{{ element_id }}"
-          data-name="{{ dataset.name|escape }}"
-        >Preview</button>
+        <div class="saved-actions">
+          <button
+            class="preview-button"
+            type="button"
+            data-preview-source="{{ element_id }}"
+            data-name="{{ dataset.name|escape }}"
+          >Preview</button>
+          {# Opens Training with this dataset already selected. #}
+          <a class="preview-button train-link" href="{% url 'training_configuration' %}?dataset={{ dataset.id }}">Train →</a>
+        </div>
         {% endwith %}{% endwith %}
       </article>
       {% endfor %}
