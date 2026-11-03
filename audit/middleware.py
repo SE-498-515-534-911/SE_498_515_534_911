@@ -5,7 +5,8 @@ view and of the role middleware, and logs two kinds of refusal for a logged-in
 user:
 
 * any ``403`` (a role that is not allowed, a missing CSRF token, ...);
-* a ``404`` where the item exists but belongs to someone else. The user is told
+* a ``404`` where the item exists but belongs to someone else (a run in the URL,
+  a run id sent to the compare endpoint, or a ``dataset_id`` in a request). The user is told
   "not found" (SAD DD4, so the answer does not reveal the item exists), but the
   Admin can still see the attempt. A ``404`` for an item that does not exist at
   all is not logged: that is just a wrong address.
@@ -35,6 +36,18 @@ def _dataset_id_sent_by(request):
     return int(raw)
 
 
+def _run_ids_sent_by(request):
+    """The ``run_ids`` list of a JSON body (the compare endpoint), or an empty list."""
+    if 'json' not in (request.content_type or ''):
+        return []
+    body = json.loads(request.body or b'{}')
+    ids = body.get('run_ids') if isinstance(body, dict) else None
+    if not isinstance(ids, list):
+        return []
+    # Real numbers only: a text, a list or a true/false is not a run id.
+    return [i for i in ids if isinstance(i, int) and not isinstance(i, bool)]
+
+
 def _foreign_item(request, user):
     """``"run:5"`` or ``"dataset:3"`` if the request asked for someone else's item, else ''."""
     match = request.resolver_match
@@ -44,6 +57,16 @@ def _foreign_item(request, user):
     run_id = match.kwargs.get('run_id')
     if run_id is not None and Run.objects.filter(pk=run_id).exclude(owner=user).exists():
         return f'run:{run_id}'
+
+    if request.method == 'POST' and match.url_name == 'api-run-compare':
+        try:
+            foreign = (
+                Run.objects.filter(pk__in=_run_ids_sent_by(request))
+                .exclude(owner=user).order_by('pk').values_list('pk', flat=True).first()
+            )
+        except (ValueError, TypeError, OverflowError):
+            return ''
+        return f'run:{foreign}' if foreign else ''
 
     if request.method == 'POST':
         try:
