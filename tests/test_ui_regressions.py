@@ -231,8 +231,8 @@ def test_the_saved_datasets_list_holds_only_the_dataset_details(student_client):
     assert 'JSON.parse cannot read' not in saved and 'escapejs' not in saved
 
 
-def test_the_decorative_asterisk_glyphs_are_gone_from_every_template():
+def test_the_decorative_asterisk_sparkle_and_diamond_glyphs_are_gone_from_every_template():
     for path in all_templates():
         text = path.read_text(encoding='utf-8')
-        for glyph in ('✳', '✦'):
+        for glyph in ('✳', '✦', '◆', '◇'):
             assert glyph not in text, f'{glyph} is still in {path.name}'
