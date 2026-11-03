@@ -351,3 +351,39 @@ def test_the_form_really_downloads_what_it_asks_for(client, owner, tmp_path):
     client.force_login(owner)
     response = client.get(f'/api/datasets/{dataset.pk}/prepared', {'strategy': 'drop_rows', 'keep': ''})
     assert response.status_code == 200 and len(frame(response)) == 2          # keep= empty means "no column kept"
+
+
+# ---- the protection must not depend on how pandas stores text --------------------------------------------------------
+# pandas 2 stores text as "object", pandas 3 (what GitHub installs) as a separate string type. A check for
+# "object" alone let formulas through on pandas 3, so every kind of text column is tested directly.
+
+@pytest.mark.parametrize('dtype', ['object', 'string', 'category'])
+def test_formula_text_is_neutralised_whatever_type_pandas_stores_it_as(dtype):
+    from datasets.prepared_download import neutralise_frame
+    frame = pd.DataFrame({'=evil': pd.Series(['=cmd', '+1', ' -x', '@y', 'fine', None], dtype=dtype),
+                          'score': [-5, 1, 2, 3, 4, 5]})
+    safe = neutralise_frame(frame)
+    assert list(safe.columns) == ["'=evil", 'score']
+    assert safe.iloc[:, 0].astype(object).tolist() == ["'=cmd", "'+1", "' -x", "'@y", 'fine', '']   # missing -> empty
+    assert safe.score.tolist() == [-5, 1, 2, 3, 4, 5]          # numbers stay numbers
+
+
+@pytest.mark.parametrize('dtype', ['object', 'string', 'category'])
+def test_missing_text_is_written_as_an_empty_cell_not_a_marker(dtype):
+    from datasets.prepared_download import neutralise_frame
+    frame = pd.DataFrame({'t': pd.Series(['a', None], dtype=dtype), 'n': [1, 2]})
+    lines = neutralise_frame(frame).to_csv(index=False).splitlines()
+    assert lines == ['t,n', 'a,1', ',2']                        # an empty cell, never <NA>, nan or None
+
+
+def test_safe_cell_handles_every_kind_of_missing_value():
+    from datasets.prepared_download import safe_cell
+    for missing in (None, float('nan'), pd.NA):
+        assert safe_cell(missing) == ''
+
+
+def test_two_columns_that_end_up_with_the_same_name_are_both_cleaned():
+    from datasets.prepared_download import neutralise_frame
+    frame = pd.DataFrame([['=a', '=b']], columns=['x', 'x'])
+    safe = neutralise_frame(frame)
+    assert safe.iloc[0].tolist() == ["'=a", "'=b"]
