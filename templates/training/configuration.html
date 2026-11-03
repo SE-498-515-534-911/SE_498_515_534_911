@@ -215,6 +215,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Arriving from the Train button on the Datasets page (?dataset=<id>): select that dataset
+    // and load its columns, so the user does not have to choose it again.
+    const wantedDataset = new URLSearchParams(window.location.search).get("dataset");
+    if (wantedDataset && [...datasetSelect.options].some(option => option.value === wantedDataset)) {
+        datasetSelect.value = wantedDataset;
+        datasetSelect.dispatchEvent(new Event("change"));
+    }
+
     function renderParameters(model) {
         parameterFields.innerHTML = "";
 
@@ -327,8 +335,25 @@ document.addEventListener("DOMContentLoaded", () => {
         return params;
     }
 
+    // When the model has been trained, the server reports TRAINED (COMPLETED only appears
+    // once the results page has evaluated it). Either means the user can look at the results.
+    const successStatuses = ["TRAINED", "COMPLETED", "SUCCEEDED"];
+
+    function showTrainingDone(runId) {
+        trainingMessage.className = "inline-status status-success";
+        trainingMessage.textContent = `Training finished. Run ID: ${runId}. `;
+
+        const link = document.createElement("a");
+        link.className = "button button-primary";
+        link.style.marginTop = "10px";
+        link.href = `/runs/${encodeURIComponent(runId)}/results/`;
+        link.textContent = "Training done: click to view results";
+        trainingMessage.appendChild(document.createElement("br"));
+        trainingMessage.appendChild(link);
+    }
+
     async function pollTraining(runId) {
-        const terminalStatuses = ["SUCCEEDED", "FAILED", "COMPLETED"];
+        const terminalStatuses = [...successStatuses, "FAILED"];
 
         for (let attempt = 0; attempt < 120; attempt++) {
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -345,12 +370,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 showMessage(`Training status: ${status}`);
 
                 if (terminalStatuses.includes(status.toUpperCase())) {
-                    showMessage(
-                        `Training finished. Run ID: ${runId}. Status: ${status}`,
-                        status.toUpperCase() === "FAILED"
-                            ? "status-error"
-                            : "status-success"
-                    );
+                    if (successStatuses.includes(status.toUpperCase())) {
+                        showTrainingDone(runId);
+                    } else {
+                        const reason = data.error && data.error.message
+                            ? ` ${data.error.message}`
+                            : "";
+                        showMessage(
+                            `Training finished. Run ID: ${runId}. Status: ${status}.${reason}`,
+                            "status-error"
+                        );
+                    }
                     trainButton.disabled = false;
                     trainButton.textContent = "Start Training";
                     return;

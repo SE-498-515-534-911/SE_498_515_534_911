@@ -214,7 +214,9 @@ document.getElementById("parameter-form").addEventListener("submit", async event
 
         if (input.dataset.kind === "int_or_none" && value === "") {
             params[input.name] = null;
-        } else if (input.dataset.kind === "int") {
+        } else if (["int", "int_or_none"].includes(input.dataset.kind)) {
+            // "int_or_none" with a value (such as a maximum depth of 5) must also go as a
+            // number: sent as the text "5" the server refuses it as "not a whole number".
             params[input.name] = Number.parseInt(value,10);
         } else if (input.dataset.kind === "float") {
             params[input.name] = Number(value);
