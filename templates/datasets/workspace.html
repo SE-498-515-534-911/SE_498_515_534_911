@@ -9,7 +9,7 @@
   <div>
     <div class="eyebrow">DATA WORKSPACE</div>
     <h1>Your datasets</h1>
-    <p class="muted">Upload a CSV and review its structure. Missing values and categories are handled when you train a model.</p>
+    <p class="muted">Upload a CSV and review its structure. You can also download a prepared copy; missing values and categories are handled again when you train a model.</p>
   </div>
   <div class="count-badge">
     <strong>{{ dataset_count }}</strong>
@@ -71,6 +71,26 @@
             <span>{{ dataset.rows }} rows</span>
             <span>{{ dataset.columns }} columns</span>
           </div>
+          <details class="prepare-download">
+            <summary>Download prepared CSV</summary>
+            <form method="get" action="{% url 'api-dataset-prepared' dataset.id %}">
+              <label>Missing values
+                <select name="strategy">
+                  <option value="median">Fill with the median</option>
+                  <option value="mean">Fill with the mean</option>
+                  <option value="most_frequent">Fill with the most frequent value</option>
+                  <option value="drop_rows">Drop rows with missing values</option>
+                </select>
+              </label>
+              <label>Keep this column as it is (optional)
+                <select name="keep">
+                  <option value="">Encode every text column</option>
+                  {% for column in dataset.profile_json.columns %}<option value="{{ column.name }}">{{ column.name }}</option>{% endfor %}
+                </select>
+              </label>
+              <button class="preview-button" type="submit">Download</button>
+            </form>
+          </details>
         </div>
         {% with sid=dataset.id|stringformat:"d" %}{% with element_id="profile-"|add:sid %}
         {% comment %}The profile goes in a JSON script block that the button points to. It used to be in an
