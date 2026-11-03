@@ -286,3 +286,48 @@ def test_no_page_outside_training_offers_preprocessing(student_client):
     make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
     for url in ('/', '/datasets/', '/experiments/'):
         assert 'preprocess' not in client.get(url).content.decode().lower(), url
+
+
+# ---- "Train" button on each saved dataset (usability feedback from tester 5) ------------------------------------
+
+def test_every_saved_dataset_has_a_train_button_that_opens_training_with_it_selected(student_client):
+    client, user = student_client
+    first = make_dataset(user, 'one.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    second = make_dataset(user, 'two.csv', {'preview': [['2']], 'columns': [{'name': 'b', 'type': 'n', 'missing_values': 0}]})
+    html = client.get('/datasets/').content.decode()
+    for dataset in (first, second):
+        assert f'href="/training/?dataset={dataset.pk}"' in html
+
+
+def test_the_training_page_lists_the_dataset_the_button_points_to(student_client):
+    client, user = student_client
+    dataset = make_dataset(user, 'one.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    html = client.get(f'/training/?dataset={dataset.pk}').content.decode()
+    assert f'value="{dataset.pk}"' in html
+
+
+def test_the_training_page_script_preselects_the_dataset_from_the_address():
+    source = template_text('training', 'configuration.html')
+    assert 'new URLSearchParams(window.location.search).get("dataset")' in source
+    assert 'datasetSelect.dispatchEvent(new Event("change"))' in source      # loads the target columns too
+
+
+def test_the_script_only_preselects_a_dataset_that_is_in_the_list():
+    """A made-up or someone else's id in the address selects nothing."""
+    source = template_text('training', 'configuration.html')
+    assert '[...datasetSelect.options].some(option => option.value === wantedDataset)' in source
+
+
+def test_another_users_dataset_is_not_offered_on_the_training_page_even_if_named_in_the_address(student_client):
+    client, user = student_client
+    other = get_user_model().objects.create_user('other_owner', 'oo@example.com', 'Passw0rd1')
+    theirs = make_dataset(other, 'secret_data.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    html = client.get(f'/training/?dataset={theirs.pk}').content.decode()
+    assert 'secret_data' not in html and f'value="{theirs.pk}"' not in html
+
+
+def test_the_train_button_stylesheet_is_a_separate_file_and_exists():
+    from pathlib import Path
+    from django.conf import settings
+    assert Path(settings.BASE_DIR, 'static', 'wbmme', 'datasets_page.css').is_file()
+    assert 'wbmme/datasets_page.css' in template_text('datasets', 'workspace.html')
