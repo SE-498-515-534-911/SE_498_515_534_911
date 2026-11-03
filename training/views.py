@@ -11,6 +11,8 @@ from django.http import HttpResponse, JsonResponse
 
 from accounts.api_errors import error_response
 from accounts.permissions import DATA_ROLES, get_role
+from audit import services as audit
+from audit.models import Action
 from datasets.models import Dataset
 from experiments.models import Metric, Run
 
@@ -342,6 +344,8 @@ def export_run_csv(request, run_id):
             _safe_csv_cell(metric.value),
         ])
 
+    # Audit log (US-38): who exported which run. Only the run id is logged.
+    audit.record(Action.REPORT_EXPORT, user=request.user, target=f'run:{run.pk}', request=request)
     return response
 
 def compare_runs(request):
