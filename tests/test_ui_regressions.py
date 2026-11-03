@@ -236,3 +236,53 @@ def test_the_decorative_asterisk_sparkle_and_diamond_glyphs_are_gone_from_every_
         text = path.read_text(encoding='utf-8')
         for glyph in ('✳', '✦', '◆', '◇'):
             assert glyph not in text, f'{glyph} is still in {path.name}'
+
+
+# ---- The Datasets page only uploads and previews; preprocessing is chosen when training ----------------------
+# The "Preprocess data" panel only showed a preview of a processed copy: nothing was saved or
+# downloadable and training never used it (training preprocesses inside the training run).
+
+def test_the_datasets_page_has_no_preprocess_panel(student_client):
+    client, user = student_client
+    make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    html = client.get('/datasets/').content.decode()
+    for gone in ('Preprocess', 'preprocess-form', 'dataset-select', 'strategy', 'results-panel', 'Processed dataset'):
+        assert gone not in html, gone
+
+
+def test_the_datasets_page_still_uploads_lists_and_previews(student_client):
+    client, user = student_client
+    dataset = make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    html = client.get('/datasets/').content.decode()
+    for kept in ('id="upload-form"', 'id="dataset-file"', 'id="saved-list"', 'id="saved-preview"',
+                 f'data-preview-source="profile-{dataset.pk}"', 'iris.csv'):
+        assert kept in html, kept
+
+
+def test_the_datasets_page_script_no_longer_calls_the_preprocess_api():
+    assert '/api/datasets/preprocess' not in template_text('datasets', 'workspace.html')
+
+
+def test_the_page_text_no_longer_promises_preprocessing_here():
+    source = template_text('datasets', 'workspace.html')
+    assert 'choose a preprocessing strategy' not in source and 'prepare it for modelling' not in source
+
+
+def test_preprocessing_is_still_offered_on_the_training_page(student_client):
+    client, _ = student_client
+    html = client.get('/training/').content.decode()
+    assert 'id="missing-select"' in html and 'id="categorical-select"' in html
+
+
+def test_the_preprocess_api_itself_is_untouched(student_client):
+    """Only the page panel was removed; the endpoint and its own tests remain."""
+    client, _ = student_client
+    response = client.post('/api/datasets/preprocess', {'strategy': ''})
+    assert response.status_code == 400
+
+
+def test_no_page_outside_training_offers_preprocessing(student_client):
+    client, user = student_client
+    make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    for url in ('/', '/datasets/', '/experiments/'):
+        assert 'preprocess' not in client.get(url).content.decode().lower(), url
