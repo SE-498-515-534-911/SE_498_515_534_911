@@ -215,6 +215,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Arriving from the Train button on the Datasets page (?dataset=<id>): select that dataset
+    // and load its columns, so the user does not have to choose it again.
+    const wantedDataset = new URLSearchParams(window.location.search).get("dataset");
+    if (wantedDataset && [...datasetSelect.options].some(option => option.value === wantedDataset)) {
+        datasetSelect.value = wantedDataset;
+        datasetSelect.dispatchEvent(new Event("change"));
+    }
+
     function renderParameters(model) {
         parameterFields.innerHTML = "";
 
