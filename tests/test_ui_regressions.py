@@ -164,3 +164,63 @@ def test_the_pages_the_dashboard_links_to_open(student_client):
     client, _ = student_client
     for url in ('/datasets/', '/models/', '/experiments/', '/training/'):
         assert client.get(url).status_code == 200, url
+
+
+# ---- Nothing that is not meant for the user may show on a page ------------------------------------------
+# A "{# ... #}" comment must fit on ONE line: if it spans lines Django prints it as text on the page.
+# That happened once in the Saved datasets list, so these tests look for it everywhere.
+
+def all_templates():
+    from pathlib import Path
+    from django.conf import settings
+    return sorted(Path(settings.BASE_DIR, 'templates').rglob('*.html'))
+
+
+def test_no_template_has_a_comment_tag_that_spans_lines():
+    broken = [
+        f'{path.name}:{number}'
+        for path in all_templates()
+        for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1)
+        if '{#' in line and '#}' not in line
+    ]
+    assert broken == [], f'multi-line {{# #}} comments print as text: {broken}'
+
+
+@pytest.mark.parametrize('url', ['/', '/datasets/', '/models/', '/training/', '/experiments/'])
+def test_no_template_code_or_comment_text_leaks_onto_the_pages(student_client, url):
+    client, user = student_client
+    make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
+    html = client.get(url).content.decode()
+    for leaked in ('{#', '#}', '{%', '%}', '{{', '}}'):
+        assert leaked not in html, f'{leaked!r} leaked onto {url}'
+
+
+def test_the_results_and_admin_pages_do_not_leak_template_code_either(client):
+    from accounts.models import Role
+    from experiments.models import Run
+    user = get_user_model().objects.create_user('leak_student', 'l@example.com', 'Passw0rd1')
+    admin = get_user_model().objects.create_user('leak_admin', 'a@example.com', 'Passw0rd1')
+    admin.profile.role = Role.ADMIN
+    admin.profile.save()
+    run = Run.objects.create(owner=user, dataset=make_dataset(user, 'x.csv', {}), target_column='t',
+                             model_name='knn', status=Run.Status.TRAINED)
+    for account, url in ((user, f'/runs/{run.pk}/results/'), (admin, '/accounts/admin-dashboard/')):
+        client.force_login(account)
+        html = client.get(url).content.decode()
+        for leaked in ('{#', '#}', '{%', '%}', '{{', '}}'):
+            assert leaked not in html, f'{leaked!r} leaked onto {url}'
+
+
+def test_the_saved_datasets_list_holds_only_the_dataset_details(student_client):
+    client, user = student_client
+    make_dataset(user, 'iris.csv', AWKWARD_PROFILE)
+    html = client.get('/datasets/').content.decode()
+    saved = html.split('id="saved-list"')[1].split('id="saved-preview"')[0]
+    assert 'JSON.parse cannot read' not in saved and 'escapejs' not in saved
+
+
+def test_the_decorative_asterisk_glyphs_are_gone_from_every_template():
+    for path in all_templates():
+        text = path.read_text(encoding='utf-8')
+        for glyph in ('✳', '✦'):
+            assert glyph not in text, f'{glyph} is still in {path.name}'
