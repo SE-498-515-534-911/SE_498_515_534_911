@@ -111,9 +111,9 @@
           </div>
         </div>
         {% with sid=dataset.id|stringformat:"d" %}{% with element_id="profile-"|add:sid %}
-        {# The profile goes in a JSON script block that the button points to. It used to be in an
+        {% comment %}The profile goes in a JSON script block that the button points to. It used to be in an
            attribute written with escapejs, which is for JavaScript strings: JSON.parse cannot read
-           that, so Preview did nothing. json_script writes valid JSON and is safe inside HTML. #}
+           that, so Preview did nothing. json_script writes valid JSON and is safe inside HTML.{% endcomment %}
         {{ dataset.profile_json|json_script:element_id }}
         <button
           class="preview-button"
