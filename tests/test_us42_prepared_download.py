@@ -291,3 +291,63 @@ def test_asking_for_a_dataset_that_does_not_exist_is_not_logged(client, stranger
     AuditLog.objects.all().delete()
     client.get('/api/datasets/999999/prepared')
     assert AuditLog.objects.count() == 0
+
+
+# ---- the Datasets page ---------------------------------------------------------------------------------------------------------
+
+PROFILE = {'preview': [], 'columns': [{'name': 'age', 'type': 'numeric', 'missing_values': 1},
+                                      {'name': 'label', 'type': 'text', 'missing_values': 0}]}
+
+
+def page(client, user):
+    client.force_login(user)
+    return client.get('/datasets/').content.decode()
+
+
+def test_each_saved_dataset_has_a_download_form_pointing_at_the_download(client, owner, tmp_path):
+    first = make_dataset(owner, tmp_path, RAW, name='one.csv')
+    second = make_dataset(owner, tmp_path, 'a,b\n1,x\n', name='two.csv')
+    html = page(client, owner)
+    for dataset in (first, second):
+        assert f'action="/api/datasets/{dataset.pk}/prepared"' in html
+
+
+def test_the_form_offers_the_four_strategies_and_the_datasets_columns(client, owner, tmp_path):
+    dataset = make_dataset(owner, tmp_path, RAW, name='one.csv')
+    Dataset.objects.filter(pk=dataset.pk).update(profile_json=PROFILE)
+    html = page(client, owner)
+    for strategy in ('median', 'mean', 'most_frequent', 'drop_rows'):
+        assert f'<option value="{strategy}">' in html
+    assert '<option value="age">age</option>' in html and '<option value="label">label</option>' in html
+    assert 'name="strategy"' in html and 'name="keep"' in html
+
+
+def test_awkward_column_names_are_escaped_in_the_form(client, owner, tmp_path):
+    dataset = make_dataset(owner, tmp_path, RAW, name='one.csv')
+    Dataset.objects.filter(pk=dataset.pk).update(profile_json={
+        'columns': [{'name': '"><script>alert(1)</script>', 'type': 'text', 'missing_values': 0}]})
+    html = page(client, owner)
+    assert '<script>alert(1)</script>' not in html
+    assert '&lt;script&gt;alert(1)&lt;/script&gt;' in html
+
+
+def test_the_form_only_appears_for_your_own_datasets(client, owner, stranger, tmp_path):
+    mine = make_dataset(owner, tmp_path, RAW, name='mine.csv')
+    theirs = make_dataset(stranger, tmp_path, 'a,b\n1,x\n', name='theirs.csv')
+    html = page(client, owner)
+    assert f'/api/datasets/{mine.pk}/prepared' in html
+    assert f'/api/datasets/{theirs.pk}/prepared' not in html and 'theirs.csv' not in html
+
+
+def test_a_dataset_without_a_profile_still_gets_a_working_form(client, owner, tmp_path):
+    dataset = make_dataset(owner, tmp_path, RAW, name='plain.csv')       # profile_json is {}
+    html = page(client, owner)
+    assert f'action="/api/datasets/{dataset.pk}/prepared"' in html and 'Encode every text column' in html
+
+
+def test_the_form_really_downloads_what_it_asks_for(client, owner, tmp_path):
+    """Submitting the form's own field names gives the file the form promises."""
+    dataset = make_dataset(owner, tmp_path, RAW, name='one.csv')
+    client.force_login(owner)
+    response = client.get(f'/api/datasets/{dataset.pk}/prepared', {'strategy': 'drop_rows', 'keep': ''})
+    assert response.status_code == 200 and len(frame(response)) == 2          # keep= empty means "no column kept"

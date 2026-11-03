@@ -246,7 +246,7 @@ def test_the_datasets_page_has_no_preprocess_panel(student_client):
     client, user = student_client
     make_dataset(user, 'iris.csv', {'preview': [['1']], 'columns': [{'name': 'a', 'type': 'n', 'missing_values': 0}]})
     html = client.get('/datasets/').content.decode()
-    for gone in ('Preprocess', 'preprocess-form', 'dataset-select', 'strategy', 'results-panel', 'Processed dataset'):
+    for gone in ('Preprocess', 'preprocess-form', 'dataset-select', 'results-panel', 'Processed dataset'):
         assert gone not in html, gone
 
 
