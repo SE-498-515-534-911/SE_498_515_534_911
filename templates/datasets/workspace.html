@@ -7,7 +7,7 @@
   <div>
     <div class="eyebrow">DATA WORKSPACE</div>
     <h1>Your datasets</h1>
-    <p class="muted">Upload a CSV, review its structure, and prepare it for modelling.</p>
+    <p class="muted">Upload a CSV and review its structure. Missing values and categories are handled when you train a model.</p>
   </div>
   <div class="count-badge">
     <strong>{{ dataset_count }}</strong>
@@ -17,7 +17,7 @@
 
 <section class="workflow-banner">
   <div class="workflow-mark"><span>01</span><i></i><span>02</span><i></i><span>03</span></div>
-  <div class="workflow-copy"><strong>From raw data to model-ready data</strong><p>Upload a CSV, inspect its quality, then choose a preprocessing strategy.</p></div>
+  <div class="workflow-copy"><strong>From raw data to a trained model</strong><p>Upload a CSV, inspect its structure, then train a model on the Training page.</p></div>
   <span class="workflow-status"><span></span> Workspace ready</span>
 </section>
 
@@ -45,46 +45,6 @@
       <p id="upload-status" class="inline-status" role="status"></p>
     </form>
 
-    <div class="divider-line"></div>
-
-    <div class="section-title">
-      <span class="step-number step-peach">02</span>
-      <div>
-        <h2>Preprocess data</h2>
-        <p class="muted">Handle missing values and encode categories.</p>
-      </div>
-    </div>
-
-    <form id="preprocess-form" class="form-stack">
-      <label class="field-label" for="dataset-select">
-        Dataset to preprocess
-        <select id="dataset-select" name="dataset_id" required>
-          <option value="">Choose a saved dataset</option>
-          {% for dataset in datasets %}
-          <option value="{{ dataset.id }}">{{ dataset.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-
-      <label class="field-label" for="strategy">
-        Preprocessing strategy
-        <select id="strategy" name="strategy">
-          <option value="mean">Mean imputation</option>
-          <option value="median">Median imputation</option>
-          <option value="most_frequent">Most frequent value</option>
-          <option value="drop_rows">Drop rows with missing values</option>
-        </select>
-      </label>
-
-      <div class="strategy-note" id="strategy-note">
-        Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.
-      </div>
-
-      <button class="button button-secondary full-width" type="submit">
-        Preprocess selected CSV <span>→</span>
-      </button>
-      <p id="preprocess-status" class="inline-status" role="status"></p>
-    </form>
   </section>
 
   <section class="panel saved-panel">
@@ -149,19 +109,6 @@
   </section>
 </div>
 
-<section class="panel results-panel" id="results-panel" hidden>
-  <div class="panel-heading">
-    <div>
-      <h2>Processed dataset</h2>
-      <p class="muted" id="results-summary">Preprocessing results</p>
-    </div>
-    <span class="status-pill status-ready">Completed</span>
-  </div>
-  <div class="table-wrap">
-    <table class="data-table" id="results-table"></table>
-  </div>
-  <p class="results-footnote">Preview of the processed response. The original uploaded file is not overwritten.</p>
-</section>
 {% endblock %}
 
 {% block scripts %}
@@ -169,17 +116,8 @@
 (() => {
   const fileInput = document.getElementById('dataset-file');
   const selectedFile = document.getElementById('selected-file');
-  const datasetSelect = document.getElementById('dataset-select');
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
   const uploadStatus = document.getElementById('upload-status');
-  const preprocessStatus = document.getElementById('preprocess-status');
-
-  const strategies = {
-    mean: 'Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
-    median: 'Fills missing numeric values with their median and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
-    most_frequent: 'Fills missing values with the most frequent value in each column. Categorical columns are one-hot encoded.',
-    drop_rows: 'Removes rows containing missing values. Categorical columns are one-hot encoded.'
-  };
 
   const datasetSearch = document.getElementById('dataset-search');
   datasetSearch?.addEventListener('input', () => {
@@ -191,10 +129,6 @@
 
   fileInput.addEventListener('change', () => {
     selectedFile.textContent = fileInput.files[0]?.name || 'No file selected';
-  });
-
-  document.getElementById('strategy').addEventListener('change', event => {
-    document.getElementById('strategy-note').textContent = strategies[event.target.value];
   });
 
   async function readResponse(response) {
@@ -253,53 +187,6 @@
     } finally {
       button.disabled = false;
       button.innerHTML = 'Upload dataset <span>→</span>';
-    }
-  });
-
-  document.getElementById('preprocess-form').addEventListener('submit', async event => {
-    event.preventDefault();
-
-    const datasetId = datasetSelect.value;
-
-    if (!datasetId) {
-      return setStatus(preprocessStatus, 'Choose a saved dataset first.', 'status-error');
-    }
-
-    const body = new FormData();
-    body.append('dataset_id', datasetId);
-    body.append('strategy', document.getElementById('strategy').value);
-
-    const button = event.currentTarget.querySelector('button');
-    button.disabled = true;
-    button.textContent = 'Processing…';
-
-    try {
-      const data = await readResponse(await fetch('/api/datasets/preprocess', {
-        method: 'POST',
-        body,
-        headers: {
-          'X-CSRFToken': csrf,
-          'Accept': 'application/json'
-        },
-        credentials: 'same-origin'
-      }));
-
-      renderTable(document.getElementById('results-table'), data.columns, data.data);
-
-      document.getElementById('results-summary').textContent =
-        `${data.rows} rows · ${data.columns.length} columns · Strategy: ${data.strategy.replaceAll('_', ' ')}`;
-
-      document.getElementById('results-panel').hidden = false;
-      setStatus(preprocessStatus, 'Preprocessing completed successfully.', 'status-success');
-      document.getElementById('results-panel').scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    } catch (error) {
-      setStatus(preprocessStatus, error.message, 'status-error');
-    } finally {
-      button.disabled = false;
-      button.innerHTML = 'Preprocess selected CSV <span>→</span>';
     }
   });
 

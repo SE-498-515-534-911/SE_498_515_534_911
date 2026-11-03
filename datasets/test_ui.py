@@ -54,7 +54,8 @@ def test_dataset_workspace_renders_for_student(client, ui_student):
     response = client.get("/datasets/")
     assert response.status_code == 200
     assert b"Upload a dataset" in response.content
-    assert b"Preprocess data" in response.content
+    # Preprocessing is chosen on the Training page; the Datasets page only uploads and previews.
+    assert b"Preprocess data" not in response.content
 
 
 def test_dataset_workspace_rejects_admin(client, django_user_model):
@@ -69,8 +70,9 @@ def test_dataset_workspace_rejects_admin(client, django_user_model):
     assert response.status_code == 403
 
 
-def test_workspace_contains_supported_strategies(client, ui_student):
+def test_training_page_offers_the_supported_strategies(client, ui_student):
+    # The missing-value strategies are chosen when training; the Datasets page no longer has them.
     client.force_login(ui_student)
-    response = client.get("/datasets/")
+    response = client.get("/training/")
     for strategy in (b"mean", b"median", b"most_frequent", b"drop_rows"):
         assert strategy in response.content
