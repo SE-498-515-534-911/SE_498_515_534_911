@@ -153,17 +153,29 @@ def test_the_results_page_the_button_points_to_exists(student_client):
 
 # ---- Dashboard -----------------------------------------------------------------------------------------
 
-def test_the_quick_start_tiles_link_to_the_models_and_evaluation_pages(student_client):
+def test_the_quick_start_tiles_link_to_the_training_and_evaluation_pages(student_client):
     client, _ = student_client
     html = client.get('/').content.decode()
-    assert 'href="/models/"' in html and 'href="/experiments/"' in html
+    assert 'href="/training/"' in html and 'href="/experiments/"' in html
     assert 'Planned' not in html
+
+
+def test_there_is_no_models_link_in_the_sidebar_or_on_the_dashboard(student_client):
+    """Models only repeated what the Training page already offers, so its link was removed."""
+    client, _ = student_client
+    for url in ('/', '/datasets/', '/training/', '/experiments/'):
+        assert 'href="/models/"' not in client.get(url).content.decode(), url
 
 
 def test_the_pages_the_dashboard_links_to_open(student_client):
     client, _ = student_client
-    for url in ('/datasets/', '/models/', '/experiments/', '/training/'):
+    for url in ('/datasets/', '/experiments/', '/training/'):
         assert client.get(url).status_code == 200, url
+
+
+def test_the_models_page_still_opens_by_its_address(student_client):
+    client, _ = student_client
+    assert client.get('/models/').status_code == 200
 
 
 # ---- Nothing that is not meant for the user may show on a page ------------------------------------------
