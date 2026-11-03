@@ -37,7 +37,7 @@ def safe_cell(value):
     =, +, - or @ (after any blanks) gets a leading apostrophe, so a spreadsheet
     shows it as text instead of running it as a formula.
     """
-    if value is None or (isinstance(value, float) and value != value):
+    if value is None or value is pd.NA or (isinstance(value, float) and value != value):
         return ''                                   # missing
     if isinstance(value, numbers.Number):
         return value
@@ -45,6 +45,23 @@ def safe_cell(value):
     if text.lstrip(' \t\r\n\v\f').startswith(('=', '+', '-', '@')):
         return "'" + text
     return text
+
+
+def neutralise_frame(prepared):
+    """A copy of ``prepared`` that is safe to open in a spreadsheet.
+
+    The column names and EVERY column that is not a number are cleaned. It must not
+    depend on how pandas stores text: older versions use the ``object`` type, newer
+    ones a separate string type, and a check for ``object`` alone silently skipped the
+    newer one (found by the tests on a fresh install).
+    """
+    safe = prepared.copy()
+    safe.columns = [safe_cell(name) for name in safe.columns]
+    for position in range(safe.shape[1]):
+        column = safe.iloc[:, position]
+        if not pd.api.types.is_numeric_dtype(column):
+            safe.isetitem(position, column.map(safe_cell))
+    return safe
 
 
 def prepare(dataframe, strategy, keep=None):
@@ -123,11 +140,7 @@ def download_prepared(request, dataset_id):
             details={'field': 'keep'} if keep and 'keep' in str(exc).lower() else None,
         )
 
-    # Neutralise formula-like text in the column names and in every text column.
-    safe = prepared.copy()
-    safe.columns = [safe_cell(name) for name in safe.columns]
-    for column in safe.columns[safe.dtypes == object]:
-        safe[column] = safe[column].map(safe_cell)
+    safe = neutralise_frame(prepared)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{_file_name(dataset.name)}"'
