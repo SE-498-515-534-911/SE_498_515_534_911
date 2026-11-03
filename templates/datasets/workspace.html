@@ -110,12 +110,18 @@
             <span>{{ dataset.columns }} columns</span>
           </div>
         </div>
+        {% with sid=dataset.id|stringformat:"d" %}{% with element_id="profile-"|add:sid %}
+        {# The profile goes in a JSON script block that the button points to. It used to be in an
+           attribute written with escapejs, which is for JavaScript strings: JSON.parse cannot read
+           that, so Preview did nothing. json_script writes valid JSON and is safe inside HTML. #}
+        {{ dataset.profile_json|json_script:element_id }}
         <button
           class="preview-button"
           type="button"
-          data-preview="{{ dataset.profile_json|escapejs }}"
+          data-preview-source="{{ element_id }}"
           data-name="{{ dataset.name|escape }}"
         >Preview</button>
+        {% endwith %}{% endwith %}
       </article>
       {% endfor %}
     </div>
@@ -335,9 +341,11 @@
     }
   }
 
-  document.querySelectorAll('[data-preview]').forEach(button => {
+  document.querySelectorAll('[data-preview-source]').forEach(button => {
     button.addEventListener('click', () => {
-      const profile = JSON.parse(button.dataset.preview);
+      const profile = JSON.parse(
+        document.getElementById(button.dataset.previewSource).textContent
+      );
       const preview = profile.preview || [];
       const columns = profile.columns || [];
       const headers = columns.map(column => column.name);
