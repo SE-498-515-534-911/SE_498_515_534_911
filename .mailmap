@@ -1,0 +1,4 @@
+# Maps a mistaken commit email to the verified one (git shortlog, git log --use-mailmap, blame).
+# Vikas's first commits recorded his Git remote URL as the author email by mistake.
+# The commits themselves are not changed.
+vikasvittalaihole <vikasaihole.50@gmail.com> <git@github.com:vikasvittalaihole/attendance-app.git>
