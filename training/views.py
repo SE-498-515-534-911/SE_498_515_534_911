@@ -5,6 +5,8 @@ error catalogue (SAD 4.4.2) through ``accounts.api_errors.error_response``.
 """
 import json
 
+from django.core.paginator import Paginator
+
 from django.db import transaction
 from django.http import JsonResponse
 
@@ -223,7 +225,7 @@ def training_status(request, run_id):
     })
 
 def run_history(request):
-    """GET /api/runs: list the current user's runs, newest first."""
+    """GET /api/runs: paginated list of the current user's runs, newest first."""
     refused = _refuse(request, 'GET')
     if refused:
         return refused
@@ -235,8 +237,11 @@ def run_history(request):
         .order_by('-created_at', '-id')
     )
 
+    paginator = Paginator(runs, 20)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     history = []
-    for run in runs:
+    for run in page_obj:
         history.append({
             'run_id': run.pk,
             'owner': run.owner_id,
@@ -255,7 +260,12 @@ def run_history(request):
             'created_at': _iso(run.created_at),
             'started_at': _iso(run.started_at),
             'finished_at': _iso(run.finished_at),
-
         })
 
-    return JsonResponse({'runs': history})
+    return JsonResponse({
+        'runs': history,
+        'page': page_obj.number,
+        'per_page': 20,
+        'total': paginator.count,
+        'total_pages': paginator.num_pages,
+    })
