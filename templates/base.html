@@ -18,9 +18,8 @@
       <nav class="side-nav">
         <a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"><span class="nav-icon">⌂</span> Overview</a>
         <a href="{% url 'dataset_workspace' %}" class="nav-link {% if request.resolver_match.url_name == 'dataset_workspace' %}active{% endif %}"><span class="nav-icon">▤</span> Datasets</a>
-        <a class="nav-link disabled-link" href="#models" title="Model configuration is planned for Sprint 2"><span class="nav-icon">◇</span> Models <span class="soon">SOON</span></a>
-        <a class="nav-link disabled-link" href="#training" title="Training workflow is planned for Sprint 2"><span class="nav-icon">▷</span> Training <span class="soon">SOON</span></a>
-        <a class="nav-link disabled-link" href="#evaluation" title="Evaluation UI is planned for Sprint 2"><span class="nav-icon">▥</span> Evaluation <span class="soon">SOON</span></a>
+        <a href="{% url 'training_configuration' %}" class="nav-link {% if request.resolver_match.url_name == 'training_configuration' %}active{% endif %}"><span class="nav-icon">⚙</span> Training</a>
+        <a href="{% url 'experiments' %}" class="nav-link {% if request.resolver_match.url_name == 'experiments' or request.resolver_match.url_name == 'run-results' %}active{% endif %}"><span class="nav-icon">▥</span> Evaluation</a>
       </nav>
       <div class="sidebar-bottom"><div class="help-card"><span class="help-dot"></span><div><strong>All systems ready</strong><small>Secure session active</small></div></div><div class="sidebar-note">Prepare data with clarity.<br><b>Build with confidence.</b></div></div>
     </aside>

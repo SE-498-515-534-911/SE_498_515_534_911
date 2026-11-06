@@ -19,6 +19,7 @@ the worker in the calling thread).
 import json
 import logging
 import multiprocessing
+import os
 
 from django.conf import settings
 from django.utils.module_loading import import_string
@@ -73,20 +74,33 @@ def _wait(process, limit, on_tick):
 
 
 def _run_in_new_process(entry, spec, limit, on_tick):
-    """Start the job process and wait. Returns its exit code, or None if it had to be killed."""
+    """Start the job process with restricted numerical-library threads."""
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
     process = multiprocessing.get_context('spawn').Process(
-        target=entry, args=(spec,), name=f"wbmme-job-{spec['run_id']}", daemon=True
+        target=entry,
+        args=(spec,),
+        name=f"wbmme-job-{spec['run_id']}",
+        daemon=True,
     )
+
     process.start()
+
     try:
         if _wait(process, limit, on_tick):
             return process.exitcode
+
         process.kill()
         process.join(10)
         return None
+
     finally:
-        if process.is_alive():  # pragma: no cover - defensive: never leave a stray process
+        if process.is_alive():
             process.kill()
+            process.join(10)
 
 
 def _read_result(out_dir):

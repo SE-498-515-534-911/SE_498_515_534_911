@@ -3,15 +3,18 @@
 Errors use the team's standard envelope (SAD 4.3.1) and the codes of the
 error catalogue (SAD 4.4.2) through ``accounts.api_errors.error_response``.
 """
+import csv
 import json
 
 from django.core.paginator import Paginator
 
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 
 from accounts.api_errors import error_response
 from accounts.permissions import DATA_ROLES, get_role
+from audit import services as audit
+from audit.models import Action
 from datasets.models import Dataset
 from experiments.models import Metric, Run
 
@@ -164,19 +167,25 @@ def start_training(request):
         )
 
     # Check again and create in one step, so two quick requests cannot both pass.
-    with limits.job_quota_lock, transaction.atomic():
+        # Check quota and create the run.
+    with limits.job_quota_lock:
         if _active_jobs(request.user) >= quota:
             return _job_limit_reached(request, quota)
-        run = Run.objects.create(
-            owner=request.user,
-            dataset=dataset,
-            target_column=parsed.target_column,
-            model_name=parsed.model,
-            params_json=parsed.params,
-            preprocessing_json=parsed.preprocessing,
-            split_json=parsed.split,
-        )
-        jobs.submit(run.pk)
+
+        with transaction.atomic():
+            run = Run.objects.create(
+                owner=request.user,
+                dataset=dataset,
+                target_column=parsed.target_column,
+                model_name=parsed.model,
+                params_json=parsed.params,
+                preprocessing_json=parsed.preprocessing,
+                split_json=parsed.split,
+            )
+
+    # Submit only after the database transaction commits.
+    jobs.submit(run.pk)
+
     return JsonResponse(
         {
             'run_id': run.pk,
@@ -268,4 +277,177 @@ def run_history(request):
         'per_page': 20,
         'total': paginator.count,
         'total_pages': paginator.num_pages,
+    })
+
+def _safe_csv_cell(value):
+    """Neutralise spreadsheet formula injection in exported CSV cells."""
+    if value is None:
+        return ''
+
+    if isinstance(value, (int, float)):
+        return value
+
+    text = str(value)
+
+    # Check the first meaningful character after whitespace/control characters.
+    dangerous_prefix = text.lstrip(' \t\r\n\v\f')
+
+    if dangerous_prefix.startswith(('=', '+', '-', '@')):
+        return "'" + text
+
+    return text
+
+def export_run_csv(request, run_id):
+    """GET /api/runs/<run_id>/export: export one owned run as CSV."""
+    refused = _refuse(request, 'GET')
+    if refused:
+        return refused
+
+    run = (
+        Run.objects.select_related('dataset')
+        .prefetch_related('metrics')
+        .filter(pk=run_id, owner=request.user)
+        .first()
+    )
+
+    if run is None:
+        return error_response(
+            request, 'NOT_FOUND', 'We could not find that run.', 404
+        )
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="run-{run.pk}-results.csv"'
+    )
+
+    writer = csv.writer(response)
+    writer.writerow(['Setting', 'Value'])
+
+    settings_rows = [
+        ('run_id', run.pk),
+        ('dataset_id', run.dataset_id),
+        ('dataset_name', run.dataset.name),
+        ('target_column', run.target_column),
+        ('model', run.model_name),
+        ('status', run.status),
+        ('parameters', json.dumps(run.params_json, sort_keys=True)),
+        ('preprocessing', json.dumps(run.preprocessing_json, sort_keys=True)),
+        ('split', json.dumps(run.split_json, sort_keys=True)),
+        ('created_at', _iso(run.created_at)),
+        ('started_at', _iso(run.started_at)),
+        ('finished_at', _iso(run.finished_at)),
+    ]
+
+    for setting, value in settings_rows:
+        writer.writerow([
+            _safe_csv_cell(setting),
+            _safe_csv_cell(value),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['Metric', 'Value'])
+
+    for metric in run.metrics.all():
+        writer.writerow([
+            _safe_csv_cell(metric.name),
+            _safe_csv_cell(metric.value),
+        ])
+
+    # Audit log (US-38): who exported which run. Only the run id is logged.
+    audit.record(Action.REPORT_EXPORT, user=request.user, target=f'run:{run.pk}', request=request)
+    return response
+
+def compare_runs(request):
+    """POST /api/runs/compare: compare 2-4 runs owned by the caller."""
+    refused = _refuse(request, 'POST')
+    if refused:
+        return refused
+
+    body = _json_object(request)
+    if body is None:
+        return _not_a_json_object(request)
+
+    run_ids = body.get('run_ids')
+    errors = []
+
+    if not isinstance(run_ids, list):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'run_ids must be a list of 2 to 4 run IDs.',
+        })
+    elif not 2 <= len(run_ids) <= 4:
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Select between 2 and 4 runs.',
+        })
+    elif any(
+        isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0
+        for run_id in run_ids
+    ):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Every run ID must be a positive integer.',
+        })
+    elif len(set(run_ids)) != len(run_ids):
+        errors.append({
+            'field': 'run_ids',
+            'message': 'Duplicate run IDs are not allowed.',
+        })
+
+    if errors:
+        return _validation_errors(request, errors)
+
+    runs_by_id = {
+        run.pk: run
+        for run in Run.objects.filter(
+            owner=request.user,
+            pk__in=run_ids,
+        ).select_related('dataset').prefetch_related('metrics')
+    }
+
+    # Do not reveal whether an unavailable run belongs to another user.
+    if len(runs_by_id) != len(run_ids):
+        return error_response(
+            request, 'NOT_FOUND',
+            'One or more runs could not be found.', 404,
+        )
+
+    runs = [runs_by_id[run_id] for run_id in run_ids]
+    reference = runs[0]
+
+    if any(
+        run.dataset_id != reference.dataset_id
+        or run.target_column != reference.target_column
+        for run in runs[1:]
+    ):
+        return _validation_errors(request, [{
+            'field': 'run_ids',
+            'message': 'All runs must use the same dataset and target column.',
+        }])
+
+    comparisons = []
+    for run in runs:
+        comparisons.append({
+            'run_id': run.pk,
+            'dataset_id': run.dataset_id,
+            'target_column': run.target_column,
+            'model': run.model_name,
+            'params': run.params_json,
+            'preprocessing': run.preprocessing_json,
+            'split': run.split_json,
+            'status': run.status,
+            'metrics': {
+                metric.name: metric.value
+                for metric in run.metrics.all()
+            },
+            'created_at': _iso(run.created_at),
+            'links': {
+                'status': f'/api/train/{run.pk}',
+            },
+        })
+
+    return JsonResponse({
+        'dataset_id': reference.dataset_id,
+        'target_column': reference.target_column,
+        'runs': comparisons,
     })

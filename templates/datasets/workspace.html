@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Datasets · WBMME{% endblock %}
 {% block breadcrumb %}Datasets{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'wbmme/datasets_page.css' %}">{% endblock %}
 
 {% block content %}
 <section class="welcome-row">
   <div>
     <div class="eyebrow">DATA WORKSPACE</div>
     <h1>Your datasets</h1>
-    <p class="muted">Upload a CSV, review its structure, and prepare it for modelling.</p>
+    <p class="muted">Upload a CSV and review its structure. You can also download a prepared copy; missing values and categories are handled again when you train a model.</p>
   </div>
   <div class="count-badge">
     <strong>{{ dataset_count }}</strong>
@@ -17,7 +19,7 @@
 
 <section class="workflow-banner">
   <div class="workflow-mark"><span>01</span><i></i><span>02</span><i></i><span>03</span></div>
-  <div class="workflow-copy"><strong>From raw data to model-ready data</strong><p>Upload a CSV, inspect its quality, then choose a preprocessing strategy.</p></div>
+  <div class="workflow-copy"><strong>From raw data to a trained model</strong><p>Upload a CSV, inspect its structure, then train a model on the Training page.</p></div>
   <span class="workflow-status"><span></span> Workspace ready</span>
 </section>
 
@@ -45,46 +47,6 @@
       <p id="upload-status" class="inline-status" role="status"></p>
     </form>
 
-    <div class="divider-line"></div>
-
-    <div class="section-title">
-      <span class="step-number step-peach">02</span>
-      <div>
-        <h2>Preprocess data</h2>
-        <p class="muted">Handle missing values and encode categories.</p>
-      </div>
-    </div>
-
-    <form id="preprocess-form" class="form-stack">
-      <label class="field-label" for="dataset-select">
-        Dataset to preprocess
-        <select id="dataset-select" name="dataset_id" required>
-          <option value="">Choose a saved dataset</option>
-          {% for dataset in datasets %}
-          <option value="{{ dataset.id }}">{{ dataset.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-
-      <label class="field-label" for="strategy">
-        Preprocessing strategy
-        <select id="strategy" name="strategy">
-          <option value="mean">Mean imputation</option>
-          <option value="median">Median imputation</option>
-          <option value="most_frequent">Most frequent value</option>
-          <option value="drop_rows">Drop rows with missing values</option>
-        </select>
-      </label>
-
-      <div class="strategy-note" id="strategy-note">
-        Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.
-      </div>
-
-      <button class="button button-secondary full-width" type="submit">
-        Preprocess selected CSV <span>→</span>
-      </button>
-      <p id="preprocess-status" class="inline-status" role="status"></p>
-    </form>
   </section>
 
   <section class="panel saved-panel">
@@ -109,13 +71,43 @@
             <span>{{ dataset.rows }} rows</span>
             <span>{{ dataset.columns }} columns</span>
           </div>
+          <details class="prepare-download">
+            <summary>Download prepared CSV</summary>
+            <form method="get" action="{% url 'api-dataset-prepared' dataset.id %}">
+              <label>Missing values
+                <select name="strategy">
+                  <option value="median">Fill with the median</option>
+                  <option value="mean">Fill with the mean</option>
+                  <option value="most_frequent">Fill with the most frequent value</option>
+                  <option value="drop_rows">Drop rows with missing values</option>
+                </select>
+              </label>
+              <label>Keep this column as it is (optional)
+                <select name="keep">
+                  <option value="">Encode every text column</option>
+                  {% for column in dataset.profile_json.columns %}<option value="{{ column.name }}">{{ column.name }}</option>{% endfor %}
+                </select>
+              </label>
+              <button class="preview-button" type="submit">Download</button>
+            </form>
+          </details>
         </div>
-        <button
-          class="preview-button"
-          type="button"
-          data-preview="{{ dataset.profile_json|escapejs }}"
-          data-name="{{ dataset.name|escape }}"
-        >Preview</button>
+        {% with sid=dataset.id|stringformat:"d" %}{% with element_id="profile-"|add:sid %}
+        {% comment %}The profile goes in a JSON script block that the button points to. It used to be in an
+           attribute written with escapejs, which is for JavaScript strings: JSON.parse cannot read
+           that, so Preview did nothing. json_script writes valid JSON and is safe inside HTML.{% endcomment %}
+        {{ dataset.profile_json|json_script:element_id }}
+        <div class="saved-actions">
+          <button
+            class="preview-button"
+            type="button"
+            data-preview-source="{{ element_id }}"
+            data-name="{{ dataset.name|escape }}"
+          >Preview</button>
+          {# Opens Training with this dataset already selected. #}
+          <a class="preview-button train-link" href="{% url 'training_configuration' %}?dataset={{ dataset.id }}">Train →</a>
+        </div>
+        {% endwith %}{% endwith %}
       </article>
       {% endfor %}
     </div>
@@ -159,19 +151,6 @@
   </section>
 </div>
 
-<section class="panel results-panel" id="results-panel" hidden>
-  <div class="panel-heading">
-    <div>
-      <h2>Processed dataset</h2>
-      <p class="muted" id="results-summary">Preprocessing results</p>
-    </div>
-    <span class="status-pill status-ready">Completed</span>
-  </div>
-  <div class="table-wrap">
-    <table class="data-table" id="results-table"></table>
-  </div>
-  <p class="results-footnote">Preview of the processed response. The original uploaded file is not overwritten.</p>
-</section>
 {% endblock %}
 
 {% block scripts %}
@@ -179,17 +158,8 @@
 (() => {
   const fileInput = document.getElementById('dataset-file');
   const selectedFile = document.getElementById('selected-file');
-  const datasetSelect = document.getElementById('dataset-select');
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
   const uploadStatus = document.getElementById('upload-status');
-  const preprocessStatus = document.getElementById('preprocess-status');
-
-  const strategies = {
-    mean: 'Fills missing numeric values with their mean and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
-    median: 'Fills missing numeric values with their median and missing categories with the most frequent value. Categorical columns are one-hot encoded.',
-    most_frequent: 'Fills missing values with the most frequent value in each column. Categorical columns are one-hot encoded.',
-    drop_rows: 'Removes rows containing missing values. Categorical columns are one-hot encoded.'
-  };
 
   const datasetSearch = document.getElementById('dataset-search');
   datasetSearch?.addEventListener('input', () => {
@@ -201,10 +171,6 @@
 
   fileInput.addEventListener('change', () => {
     selectedFile.textContent = fileInput.files[0]?.name || 'No file selected';
-  });
-
-  document.getElementById('strategy').addEventListener('change', event => {
-    document.getElementById('strategy-note').textContent = strategies[event.target.value];
   });
 
   async function readResponse(response) {
@@ -266,53 +232,6 @@
     }
   });
 
-  document.getElementById('preprocess-form').addEventListener('submit', async event => {
-    event.preventDefault();
-
-    const datasetId = datasetSelect.value;
-
-    if (!datasetId) {
-      return setStatus(preprocessStatus, 'Choose a saved dataset first.', 'status-error');
-    }
-
-    const body = new FormData();
-    body.append('dataset_id', datasetId);
-    body.append('strategy', document.getElementById('strategy').value);
-
-    const button = event.currentTarget.querySelector('button');
-    button.disabled = true;
-    button.textContent = 'Processing…';
-
-    try {
-      const data = await readResponse(await fetch('/api/datasets/preprocess', {
-        method: 'POST',
-        body,
-        headers: {
-          'X-CSRFToken': csrf,
-          'Accept': 'application/json'
-        },
-        credentials: 'same-origin'
-      }));
-
-      renderTable(document.getElementById('results-table'), data.columns, data.data);
-
-      document.getElementById('results-summary').textContent =
-        `${data.rows} rows · ${data.columns.length} columns · Strategy: ${data.strategy.replaceAll('_', ' ')}`;
-
-      document.getElementById('results-panel').hidden = false;
-      setStatus(preprocessStatus, 'Preprocessing completed successfully.', 'status-success');
-      document.getElementById('results-panel').scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    } catch (error) {
-      setStatus(preprocessStatus, error.message, 'status-error');
-    } finally {
-      button.disabled = false;
-      button.innerHTML = 'Preprocess selected CSV <span>→</span>';
-    }
-  });
-
   function renderTable(table, columns, rows) {
     table.replaceChildren();
 
@@ -351,9 +270,11 @@
     }
   }
 
-  document.querySelectorAll('[data-preview]').forEach(button => {
+  document.querySelectorAll('[data-preview-source]').forEach(button => {
     button.addEventListener('click', () => {
-      const profile = JSON.parse(button.dataset.preview);
+      const profile = JSON.parse(
+        document.getElementById(button.dataset.previewSource).textContent
+      );
       const preview = profile.preview || [];
       const columns = profile.columns || [];
       const headers = columns.map(column => column.name);

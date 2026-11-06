@@ -1,0 +1,13 @@
+/* Datasets page additions (usability feedback). Kept apart from app.css, which belongs to the UI foundation. */
+.saved-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.saved-actions a.preview-button { text-decoration: none; }
+.train-link { background: #e0efdf; color: #294d32; border-color: #c9e2c8; font-weight: 700; }
+.train-link:hover { background: #d5e9d4; color: #294d32; border-color: #bcd9bb; }
+
+/* "Download prepared CSV" (US-42): a small section under each saved dataset. */
+.prepare-download { margin-top: 10px; font-size: 10px; }
+.prepare-download summary { cursor: pointer; color: #527b5f; font-weight: 700; }
+.prepare-download form { display: grid; gap: 8px; max-width: 320px; margin-top: 8px; }
+.prepare-download label { display: grid; gap: 4px; color: #6b786c; }
+.prepare-download select { min-height: 30px; font-size: 11px; }
+.prepare-download button { justify-self: start; }
