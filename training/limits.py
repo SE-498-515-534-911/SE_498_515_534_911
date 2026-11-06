@@ -85,6 +85,23 @@ def hit(key, now=None):
         return 0
 
 
+# ---- (c) total run quota ------------------------------------------------------
+
+DEFAULT_RUN_LIMIT = 100
+
+
+def run_limit():
+    """Maximum number of training runs a user may create."""
+    return int(getattr(settings, 'TRAINING_RUN_LIMIT', DEFAULT_RUN_LIMIT))
+
+
+def run_quota_message(limit):
+    return (
+        f"You have reached the limit of {limit} training runs. "
+        "You cannot create another run."
+    )
+
+
 # ---- (c) training job quota ----------------------------------------------------
 
 def job_limit(user):

@@ -77,9 +77,15 @@ def test_run_history_lists_only_your_own_runs(client, alice, bob, private_run, t
     assert 'test_accuracy' not in json.dumps(runs)       # Alice's metric is not in Bob's list
 
 
-def test_a_user_with_no_runs_sees_an_empty_history_not_other_peoples(client, bob, private_run):
+def test_a_user_with_no_runs_sees_an_empty_history_not_other_peoples(
+    client, bob, alice_run
+):
     client.force_login(bob)
-    assert client.get('/api/runs').json() == {'runs': []}
+
+    response = client.get('/api/runs').json()
+
+    assert response['runs'] == []
+    assert response['total'] == 0
 
 
 @pytest.mark.parametrize('url', ['/', '/datasets/'])

@@ -127,6 +127,20 @@
     </div>
     {% endif %}
 
+    {% if page_obj.has_other_pages %}
+    <nav class="pagination" aria-label="Dataset pages">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+
     <div class="preview-area" id="saved-preview" hidden>
       <div class="panel-heading">
         <div>
@@ -135,9 +149,11 @@
         </div>
         <button type="button" class="icon-button" id="close-preview" aria-label="Close preview">×</button>
       </div>
+
       <div class="table-wrap">
         <table class="data-table" id="preview-table"></table>
       </div>
+
       <div id="column-summary" class="column-summary"></div>
     </div>
   </section>
