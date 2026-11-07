@@ -160,11 +160,10 @@ def test_tc_data_02(accounts, browser):
     assert Dataset.objects.filter(owner=accounts['ds']).count() == 1
 
 
-@pytest.mark.xfail(strict=True, reason='TC-DATA-02 step 3 needs the report export (US-26), not merged yet')
 def test_tc_data_02_step_3_export_neutralises_formula_cells(accounts, browser):
     b = browser('ds_test1')
     run_id = completed_run(b, upload_iris(b))
-    report = b.get(f'/api/runs/{run_id}/report?format=csv')
+    report = b.get(f'/api/runs/{run_id}/export')
     assert report.status == 200
     assert not any(line.startswith(('=', '+', '-', '@')) for cell_line in report.text.splitlines()
                    for line in cell_line.split(','))
