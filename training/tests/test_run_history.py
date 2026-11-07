@@ -92,7 +92,13 @@ def test_run_history_returns_empty_list_when_no_runs(client, student):
     response = client.get("/api/runs")
 
     assert response.status_code == 200
-    assert response.json() == {"runs": []}
+    assert response.json() == {
+        "runs": [],
+        "page": 1,
+        "per_page": 20,
+        "total": 0,
+        "total_pages": 1,
+    }
 
 
 def test_run_history_rejects_post(client, student):
@@ -124,7 +130,37 @@ def test_run_history_includes_parameters_and_configuration(
     assert response.status_code == 200
     item = response.json()["runs"][0]
     assert item["params"] == params
-    assert item["split"] == split
-    assert item["params"] == params
     assert item["preprocessing"] == preprocessing
     assert item["split"] == split
+
+def test_run_history_paginates_100_runs(client, student, dataset):
+    created_runs = [
+        create_run(student, dataset)
+        for _ in range(100)
+    ]
+
+    client.force_login(student)
+
+    first_page = client.get("/api/runs?page=1").json()
+    second_page = client.get("/api/runs?page=2").json()
+    fifth_page = client.get("/api/runs?page=5").json()
+
+    assert len(first_page["runs"]) == 20
+    assert len(second_page["runs"]) == 20
+    assert len(fifth_page["runs"]) == 20
+
+    assert first_page["page"] == 1
+    assert first_page["per_page"] == 20
+    assert first_page["total"] == 100
+    assert first_page["total_pages"] == 5
+
+    all_ids = (
+        [item["run_id"] for item in first_page["runs"]]
+        + [item["run_id"] for item in second_page["runs"]]
+        + [item["run_id"] for item in client.get("/api/runs?page=3").json()["runs"]]
+        + [item["run_id"] for item in client.get("/api/runs?page=4").json()["runs"]]
+        + [item["run_id"] for item in fifth_page["runs"]]
+    )
+
+    assert len(all_ids) == 100
+    assert len(set(all_ids)) == 100

@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from django.core.paginator import Paginator
+
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -178,13 +180,23 @@ def dashboard(request):
         },
     )
 
-
 @data_user_required
 def dataset_workspace(request):
-    """Show datasets owned by the current user and the preprocessing workspace."""
-    datasets = Dataset.objects.filter(owner=request.user).order_by("-uploaded_at")
+    """Show the current user's datasets, 20 per page."""
+    datasets = (
+        Dataset.objects.filter(owner=request.user)
+        .order_by("-uploaded_at", "-id")
+    )
+
+    paginator = Paginator(datasets, 20)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+
     return render(
         request,
         "datasets/workspace.html",
-        {"datasets": datasets, "dataset_count": datasets.count()},
+        {
+            "datasets": page_obj,
+            "page_obj": page_obj,
+            "dataset_count": paginator.count,
+        },
     )
