@@ -257,17 +257,21 @@ def test_tc_exp_01_history(accounts, browser):
     assert runs[second]['params']['n_estimators'] == 20
 
 
-@pytest.mark.xfail(strict=True, reason='TC-EXP-01 steps 3-4 need Compare (US-25), not merged yet')
 def test_tc_exp_01_compare(accounts, browser):
     b = browser('ds_test1')
     dataset_id = upload_iris(b)
     first, second = completed_run(b, dataset_id), completed_run(b, dataset_id, 'knn')
     # 3. Select both and open Compare.
-    compared = b.get(f'/api/runs/compare?ids={first},{second}')
+    compared = b.post_json('/api/runs/compare', {'run_ids': [first, second]})
     assert compared.status == 200
     # 4. Compare one of them with a run on a different dataset: refused with an explanation.
     other = completed_run(b, upload_iris(b))
-    assert b.get(f'/api/runs/compare?ids={first},{other}').status == 422
+    different_dataset = b.post_json(
+        '/api/runs/compare',
+        {'run_ids': [first, other]},
+    )
+    assert different_dataset.status == 400
+    assert 'same dataset and target column' in different_dataset.json()['error']['details']['errors'][0]['message']
 
 
 # ---- TC-SEC-01: access control and data isolation (MLE-F-002, F-016, SR-005) ----
