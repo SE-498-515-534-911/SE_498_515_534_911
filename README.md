@@ -200,7 +200,7 @@ The container runs Django's development server for development and demonstration
 
 | Member | Name | GitHub | Main responsibility |
 |---|---|---|---|
-| 1 | Soumya (repository owner) | [KOTRASAISOUMYASRI](https://github.com/KOTRASAISOUMYASRI) | SRS Part A, Test Plan (1, 2, 6–9), planning, CI, Docker, demo videos |
+| 1 | Soumya (repository owner) | [KOTRASAISOUMYASRI](https://github.com/KOTRASAISOUMYASRI) | SRS Part A, Test Plan (1, 2, 6–9), planning, CI, Docker, UI building and integration, demo videos, final report|
 | 2 | Varnika | [varnikasadineni](https://github.com/varnikasadineni) | SRS Part B, Test Plan (3, 4, 5, 13), model training, tests |
 | 3 | Tejas Ponnappa | [TejasPonnappa](https://github.com/TejasPonnappa) | SAD architecture (3.3–3.9), Test Plan (10, 11, 12, 14, 15), evaluation, core platform and security, admin |
 | 4 | Vikas | [vikasvittalaihole](https://github.com/vikasvittalaihole) | SAD design (cover, 1, 2, 3.1, 3.2, 4.1–4.6, 5), test cases and RTM design column, Data Workspace, run history, compare, export |
