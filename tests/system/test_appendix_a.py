@@ -160,11 +160,10 @@ def test_tc_data_02(accounts, browser):
     assert Dataset.objects.filter(owner=accounts['ds']).count() == 1
 
 
-@pytest.mark.xfail(strict=True, reason='TC-DATA-02 step 3 needs the report export (US-26), not merged yet')
 def test_tc_data_02_step_3_export_neutralises_formula_cells(accounts, browser):
     b = browser('ds_test1')
     run_id = completed_run(b, upload_iris(b))
-    report = b.get(f'/api/runs/{run_id}/report?format=csv')
+    report = b.get(f'/api/runs/{run_id}/export')
     assert report.status == 200
     assert not any(line.startswith(('=', '+', '-', '@')) for cell_line in report.text.splitlines()
                    for line in cell_line.split(','))
@@ -258,17 +257,21 @@ def test_tc_exp_01_history(accounts, browser):
     assert runs[second]['params']['n_estimators'] == 20
 
 
-@pytest.mark.xfail(strict=True, reason='TC-EXP-01 steps 3-4 need Compare (US-25), not merged yet')
 def test_tc_exp_01_compare(accounts, browser):
     b = browser('ds_test1')
     dataset_id = upload_iris(b)
     first, second = completed_run(b, dataset_id), completed_run(b, dataset_id, 'knn')
     # 3. Select both and open Compare.
-    compared = b.get(f'/api/runs/compare?ids={first},{second}')
+    compared = b.post_json('/api/runs/compare', {'run_ids': [first, second]})
     assert compared.status == 200
     # 4. Compare one of them with a run on a different dataset: refused with an explanation.
     other = completed_run(b, upload_iris(b))
-    assert b.get(f'/api/runs/compare?ids={first},{other}').status == 422
+    different_dataset = b.post_json(
+        '/api/runs/compare',
+        {'run_ids': [first, other]},
+    )
+    assert different_dataset.status == 400
+    assert 'same dataset and target column' in different_dataset.json()['error']['details']['errors'][0]['message']
 
 
 # ---- TC-SEC-01: access control and data isolation (MLE-F-002, F-016, SR-005) ----

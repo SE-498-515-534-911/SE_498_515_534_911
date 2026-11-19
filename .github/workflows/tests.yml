@@ -1,4 +1,5 @@
-name: CI - Tests and Coverage
+
+name: CI - Tests, Coverage and SonarQube
 
 on:
   push:
@@ -14,7 +15,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,8 +33,13 @@ jobs:
 
       - name: Run main project tests
         run: |
-          python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing
+          python -m pytest --ignore=us01_datasets_code --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Run Bandit security analysis
         run: |
           python -m bandit -r accounts audit datasets training evaluation experiments config -ll
+
+      - name: SonarQube Cloud Scan
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
