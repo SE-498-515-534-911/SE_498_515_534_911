@@ -32,6 +32,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 LIMIT_SECONDS = 60.0
 DASHBOARD_LIMIT_SECONDS = 3.0
@@ -43,6 +44,14 @@ PASSWORD = 'Perf!Test2026pw'
 
 
 # ---- test data ---------------------------------------------------------------
+def safe_output_path(value):
+    path = Path(value).resolve()
+    base = Path.cwd().resolve()
+
+    if not path.is_relative_to(base):
+        raise ValueError("Output path must be inside the project directory")
+
+    return path
 
 def make_dataset(rows=ROWS, seed=0):
     """20 feature columns (15 numeric, 3 of them with 5% missing; 5 text with 8 values) and a 3-class target.
@@ -243,7 +252,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.write_csv:
-        with open(args.write_csv, 'wb') as handle:
+        with open(safe_output_path(args.write_csv), 'wb') as handle:
             handle.write(csv_bytes(make_dataset(args.rows)))
         print(f'Wrote {args.write_csv}')
         return 0
@@ -251,7 +260,7 @@ def main(argv=None):
     report = run(args.url, args.rows)
     print_report(report)
     if args.json:
-        with open(args.json, 'w', encoding='utf-8') as handle:
+        with open(safe_output_path(args.json), 'w', encoding='utf-8') as handle:
             json.dump(report, handle, indent=2)
     return 0 if report['passed'] else 1
 
