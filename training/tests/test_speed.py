@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse
+from django.db import connection
 
 from training import pipeline
 from training.benchmarks import tc_perf_02
@@ -67,7 +68,8 @@ def test_dataset_fits_the_10_mb_upload_limit_and_is_reproducible():
     assert first == tc_perf_02.csv_bytes(tc_perf_02.make_dataset())
 
 
-def test_write_csv_option(tmp_path):
+def test_write_csv_option(tmp_path,monkeypatch):
+    monkeypatch.chdir(tmp_path)
     target = tmp_path / 'generated.csv'
     assert tc_perf_02.main(['--write-csv', str(target), '--rows', '50']) == 0
     assert pd.read_csv(target).shape == (50, 21)
@@ -96,7 +98,10 @@ def test_dashboard_fails_on_a_slow_load_or_an_error(times, failures):
 @pytest.mark.django_db(transaction=True)
 def test_script_runs_tc_perf_02_end_to_end_against_a_server(live_server, settings, capsys):
     settings.TRAINING_JOBS_INLINE = False   # a real background thread, as in production
+    print("TEST DB:", connection.settings_dict['NAME'])
+    print("DB OPTIONS:", connection.settings_dict['OPTIONS'])
     report = tc_perf_02.run(live_server.url, rows=400, models=('logistic_regression', 'decision_tree'))
+    print(report)
     assert [r['status'] for r in report['results']] == ['COMPLETED', 'COMPLETED']
     assert all(r['seconds_to_completed'] <= tc_perf_02.LIMIT_SECONDS for r in report['results'])
     assert report['dataset']['feature_columns'] == 20
