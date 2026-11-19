@@ -13,6 +13,9 @@ jobs:
     name: pytest
     runs-on: ubuntu-latest
 
+    env:
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -43,3 +46,5 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
