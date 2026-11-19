@@ -1,6 +1,9 @@
 """Project-wide test settings."""
 import pytest
+import os
 
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 @pytest.fixture(autouse=True)
 def training_jobs_in_process(settings):
