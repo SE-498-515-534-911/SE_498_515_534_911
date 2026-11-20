@@ -91,7 +91,23 @@ python -m pytest --ignore=us01_datasets_code
 
 This takes several minutes. `us01_datasets_code/` is the Sprint 1 prototype of the upload; the running app does not use it and pytest skips it.
 
-GitHub Actions runs on every push and pull request: the tests with coverage and the Bandit security scan (`.github/workflows/tests.yml`), and an OWASP ZAP baseline scan of the Docker build (`.github/workflows/zap-baseline.yml`). Load tests with Locust are in `loadtest/`.
+GitHub Actions runs on every push and pull request (`.github/workflows/tests.yml`):
+
+1. the whole test suite with `pytest`, with coverage written to `coverage.xml`;
+2. the Bandit security scan of the app code (static analysis);
+3. a SonarCloud scan that reads `coverage.xml` and reports bugs, vulnerabilities, code smells and coverage.
+
+A separate workflow runs an OWASP ZAP baseline scan against the Docker build (`.github/workflows/zap-baseline.yml`, dynamic analysis). Only the `pytest` check is required before a pull request can be merged. Load tests with Locust are in `loadtest/`.
+
+**Test results and coverage** (details and how they were measured: `docs/testing-reports/`):
+
+| Measure | Result |
+|---|---|
+| Tests | about 985: unit, integration and browser system tests |
+| Line and branch coverage of the app code (our own run) | 98% |
+| Line coverage on the SonarCloud dashboard (whole repository) | 93.6% |
+
+The two coverage figures differ because of scope, not because tests are missing: SonarCloud also counts `us01_datasets_code/` (the unused Sprint 1 prototype, 311 lines never run by the tests), the load-test scripts and the test files themselves. Leaving out the prototype, SonarCloud's figure is about 97%.
 
 ## Documents
 
@@ -103,6 +119,10 @@ GitHub Actions runs on every push and pull request: the tests with coverage and 
 | Security validation | `security_validation.pdf` |
 | Upload speed benchmark | `US19_BENCHMARK.md` |
 | Story notes and reports | `docs/` (`docs/member2/stories`, `docs/member2/reports`, `docs/member3/stories`) |
+| Final testing reports (unit, system validation, code coverage, branch coverage) | `docs/testing-reports/` |
+| Where the code for each story is | `docs/member3/story-to-code-map.md` |
+| Where the code for each SAD component is | `docs/architecture-to-code-map.md` |
+| Deviations from the SRS, SAD and Test Plan | `docs/deviations.md` |
 | Usability test result | `docs/member3/stories/US-31-usability-test.md` |
 | Individual contributions | `individual files/` (each member's own sections) |
 | Diagrams used in the SAD | `diagrams/` |
