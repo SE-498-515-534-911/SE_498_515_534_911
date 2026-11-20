@@ -1,8 +1,11 @@
 # System validation report
 
-Scope: end-to-end checks of the running application over HTTP with a real
-headless Chrome, one test per functional case of Test Plan Appendix A
-(`tests/system/test_appendix_a.py`). The performance cases TC-PERF-01 to 03 are
+Scope: end-to-end checks of the running application, one test per functional
+case of Test Plan Appendix A (`tests/system/test_appendix_a.py`). The tests
+start a live server on a real port and talk to it over real HTTP with a small
+client (`tests/support/http.py`, class `Browser`), with training in a background
+thread and a separate process as on the deployed system. This client is not a
+real web browser, so it does not run the pages' JavaScript. The performance cases TC-PERF-01 to 03 are
 run separately (US-19, US-20 and the US-30 load test).
 
 | Test | Test Plan case | Result in the full run |
@@ -55,3 +58,21 @@ test; this is recorded as a known timing sensitivity.
   scan in `.github/workflows/zap-baseline.yml`.
 * Usability test: `docs/member3/stories/US-31-usability-test.md`.
 * Load test: `loadtest/` and `US19_BENCHMARK.md`.
+
+## Real-browser tests
+
+`tests/system/test_browser_flows.py` (3 tests) drives a real Chromium browser
+with Playwright, for the steps that depend on what the pages draw with
+JavaScript: the login and upload pages (TC-AUTH-01 steps 1-2, TC-DATA-01) and
+the results page with its metrics and confusion matrix (TC-EVAL-01 steps 1-3).
+
+Playwright is not in `requirements.txt`, so these tests are skipped where it is
+not installed. That was the case in CI and in the run reported here: the one
+skipped test in the totals is this file. They were not executed in this run. To
+run them:
+
+```
+pip install playwright pytest-playwright
+python -m playwright install chromium
+python -m pytest tests/system/test_browser_flows.py
+```

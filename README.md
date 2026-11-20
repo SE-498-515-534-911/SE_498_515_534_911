@@ -103,7 +103,7 @@ A separate workflow runs an OWASP ZAP baseline scan against the Docker build (`.
 
 | Measure | Result |
 |---|---|
-| Tests | about 985: unit, integration and browser system tests |
+| Tests | about 985: unit, integration and live-server system tests (the 3 real-browser Playwright tests need `pip install playwright` and are skipped otherwise) |
 | Line and branch coverage of the app code (our own run) | 98% |
 | Line coverage on the SonarCloud dashboard (whole repository) | 93.6% |
 

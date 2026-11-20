@@ -21,7 +21,7 @@ training services).
 | **Total** | **956** |
 
 Integration tests (`tests/integration/`, 19 tests: pipeline stages handing
-over to each other, load-test tooling) and system tests (10 browser tests, see
+over to each other, load-test tooling) and system tests (10 live-server HTTP tests, see
 the system validation report) make up the other 29 of the 985 collected.
 
 ## Result of the run
@@ -31,7 +31,7 @@ the system validation report) make up the other 29 of the 985 collected.
 | Passed | 980 |
 | Skipped | 1 |
 | Expected failures (xfail) | 4 |
-| Failed | 1 (`tests/system/test_appendix_a.py::test_tc_sec_01`, a browser system test, not a unit test) |
+| Failed | 1 (`tests/system/test_appendix_a.py::test_tc_sec_01`, a live-server system test, not a unit test) |
 
 All unit and integration tests passed. Total run time was 25 min 39 s with
 branch tracing switched on.

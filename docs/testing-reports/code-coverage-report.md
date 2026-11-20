@@ -43,7 +43,7 @@ repository, not only the app code measured above.
 | Where the 524 uncovered lines are | Uncovered / lines |
 |---|---|
 | `us01_datasets_code/` (Sprint 1 upload prototype, not used by the app and skipped by pytest) | 311 / 311 |
-| `tests/` (mostly browser system tests, 63 in `tests/system`) | 64 / 1,492 |
+| `tests/` (mostly the system tests, 63 in `tests/system`) | 64 / 1,492 |
 | `loadtest/` (Locust scripts, run separately) | 54 / 122 |
 | `training/` | 33 / 2,363 |
 | `audit/` | 8 / 778 |
