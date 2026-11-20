@@ -26,3 +26,7 @@ and the `wsgi`/`asgi` entry files, which contain no project logic.
 
 Overall result: **985 tests collected: 980 passed, 1 skipped, 4 xfailed,
 1 failed** (the failure is explained in the system validation report).
+
+## SonarCloud
+
+SonarCloud was added to the CI workflow after these reports were first measured. Its coverage figure (93.6%) and the reason it differs from the figures here are explained at the end of [code-coverage-report.md](code-coverage-report.md). On the same date it reported 3 bugs, 24 vulnerabilities, 3 code smells and 0.6% duplication; most of the vulnerabilities are the rule "explicitly specify the HTTP methods this endpoint accepts" (16 of 24), plus 4 in the GitHub workflow files, 3 in the Dockerfile and 1 in the Django settings.
